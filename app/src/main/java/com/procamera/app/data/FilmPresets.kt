@@ -62,22 +62,22 @@ object FilmPresetsLibrary {
         FilmPreset.TMAX_100 -> FilmPresetConfig(
             preset = FilmPreset.TMAX_100,
             description = "High contrast B&W look. Crisp and sharp.",
-            colorShift = Color(0.5f, 0.5f, 0.5f),  // strong grayscale tint
-            saturation = 0.0f,  // fully desaturated
+            colorShift = Color(1.0f, 1.0f, 1.0f),  // neutral - let saturation=0 do the B&W
+            saturation = 0.0f,  // fully desaturated = B&W
             contrast = 1.4f,
-            highlightsTint = Color(0.5f, 0.5f, 0.5f),
-            shadowsTint = Color(0.5f, 0.5f, 0.5f)
+            highlightsTint = Color(1.0f, 1.0f, 1.0f),
+            shadowsTint = Color(1.0f, 1.0f, 1.0f)
         )
 
         // Kodak Tri-X - classic B&W with grain feel
         FilmPreset.TRIX_400 -> FilmPresetConfig(
             preset = FilmPreset.TRIX_400,
             description = "Classic B&W. Warm blacks, rich tones.",
-            colorShift = Color(0.55f, 0.55f, 0.55f),  // grayscale with slight warmth
+            colorShift = Color(1.0f, 1.0f, 1.0f),  // neutral
             saturation = 0.0f,
             contrast = 1.3f,
-            highlightsTint = Color(0.55f, 0.55f, 0.55f),
-            shadowsTint = Color(0.6f, 0.55f, 0.5f)
+            highlightsTint = Color(1.0f, 1.0f, 1.0f),
+            shadowsTint = Color(1.0f, 1.0f, 1.0f)
         )
 
         // Fuji Astia 100 - cool, contrasty
