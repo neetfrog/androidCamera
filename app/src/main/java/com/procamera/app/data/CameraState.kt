@@ -90,8 +90,6 @@ data class CameraUiState(
     val showManualControls: Boolean = false,
     val showHistogram: Boolean = true,
     val showLevelIndicator: Boolean = true,
-    val showFocusPeaking: Boolean = false,
-    val showZebra: Boolean = false,
     val gridMode: GridMode = GridMode.THIRDS,
 
     // Capture state

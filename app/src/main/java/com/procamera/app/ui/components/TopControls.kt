@@ -108,22 +108,6 @@ fun TopControls(
             active = state.showLevelIndicator,
             onClick = { viewModel.toggleLevelIndicator() }
         )
-
-        // Focus peaking
-        TopIconBtn(
-            icon = Icons.Default.CenterFocusStrong,
-            label = "PEAK",
-            active = state.showFocusPeaking,
-            onClick = { viewModel.toggleFocusPeaking() }
-        )
-
-        // Zebra (overexposure highlight)
-        TopIconBtn(
-            icon = Icons.Default.Tonality,
-            label = "ZEBRA",
-            active = state.showZebra,
-            onClick = { viewModel.toggleZebra() }
-        )
     }
 }
 

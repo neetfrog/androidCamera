@@ -192,9 +192,23 @@ class Camera2Controller(private val context: Context) {
         analysisImageReader = ImageReader.newInstance(320, 240, ImageFormat.YUV_420_888, 2).also {
             it.setOnImageAvailableListener({ reader ->
                 reader.acquireLatestImage()?.let { img ->
-                    val h = computeHistogram(img)
-                    img.close()
-                    onHistogramUpdate?.invoke(h)
+                    try {
+                        val yPlane = img.planes[0]
+                        val uPlane = img.planes[1]
+                        val vPlane = img.planes[2]
+                        val yArr = ByteArray(yPlane.buffer.remaining()).also { yPlane.buffer.get(it) }
+                        val uArr = ByteArray(uPlane.buffer.remaining()).also { uPlane.buffer.get(it) }
+                        val vArr = ByteArray(vPlane.buffer.remaining()).also { vPlane.buffer.get(it) }
+                        val yStride = yPlane.rowStride
+                        val uvStride = uPlane.rowStride
+                        val uvPixel = uPlane.pixelStride
+
+                        val h = computeHistogram(img.width, img.height, yArr, uArr, vArr, yStride, uvStride, uvPixel)
+                        onHistogramUpdate?.invoke(h)
+                    } catch (_: Exception) {
+                    } finally {
+                        img.close()
+                    }
                 }
             }, cameraHandler)
             surfaces.add(it.surface)
@@ -636,24 +650,22 @@ class Camera2Controller(private val context: Context) {
 
     // ─── Histogram computation (YUV_420_888) ──────────────────────────────────
 
-    private fun computeHistogram(image: Image): HistogramData {
-        val yPlane = image.planes[0]
-        val uPlane = image.planes[1]
-        val vPlane = image.planes[2]
-        val yArr = ByteArray(yPlane.buffer.remaining()).also { yPlane.buffer.get(it) }
-        val uArr = ByteArray(uPlane.buffer.remaining()).also { uPlane.buffer.get(it) }
-        val vArr = ByteArray(vPlane.buffer.remaining()).also { vPlane.buffer.get(it) }
-
+    private fun computeHistogram(
+        width: Int,
+        height: Int,
+        yArr: ByteArray,
+        uArr: ByteArray,
+        vArr: ByteArray,
+        yStride: Int,
+        uvStride: Int,
+        uvPixel: Int
+    ): HistogramData {
         val bins = 64
         val rBin = IntArray(bins); val gBin = IntArray(bins)
         val bBin = IntArray(bins); val lBin = IntArray(bins)
-        val w = image.width; val h = image.height
-        val yStride = yPlane.rowStride
-        val uvStride = uPlane.rowStride
-        val uvPixel = uPlane.pixelStride
 
-        for (row in 0 until h step 4) {
-            for (col in 0 until w step 4) {
+        for (row in 0 until height step 4) {
+            for (col in 0 until width step 4) {
                 val yIdx = row * yStride + col
                 if (yIdx >= yArr.size) continue
                 val yv = yArr[yIdx].toInt() and 0xFF

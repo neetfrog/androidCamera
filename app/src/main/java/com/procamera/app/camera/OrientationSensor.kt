@@ -5,6 +5,9 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.Build
+import android.view.Surface
+import android.view.WindowManager
 import kotlin.math.roundToInt
 
 /**
@@ -17,6 +20,9 @@ class OrientationSensor(context: Context) {
 
     private val sensorManager =
         context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+
+    private val windowManager =
+        context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
     private val rotationSensor: Sensor? =
         sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
@@ -31,7 +37,37 @@ class OrientationSensor(context: Context) {
         override fun onSensorChanged(event: SensorEvent) {
             if (event.sensor.type != Sensor.TYPE_ROTATION_VECTOR) return
             SensorManager.getRotationMatrixFromVector(rotMatrix, event.values)
-            SensorManager.getOrientation(rotMatrix, orientation)
+
+            val remappedMatrix = FloatArray(9)
+            when (windowManager.defaultDisplay.rotation) {
+                Surface.ROTATION_0 -> SensorManager.remapCoordinateSystem(
+                    rotMatrix,
+                    SensorManager.AXIS_X,
+                    SensorManager.AXIS_Y,
+                    remappedMatrix
+                )
+                Surface.ROTATION_90 -> SensorManager.remapCoordinateSystem(
+                    rotMatrix,
+                    SensorManager.AXIS_Y,
+                    SensorManager.AXIS_MINUS_X,
+                    remappedMatrix
+                )
+                Surface.ROTATION_180 -> SensorManager.remapCoordinateSystem(
+                    rotMatrix,
+                    SensorManager.AXIS_MINUS_X,
+                    SensorManager.AXIS_MINUS_Y,
+                    remappedMatrix
+                )
+                Surface.ROTATION_270 -> SensorManager.remapCoordinateSystem(
+                    rotMatrix,
+                    SensorManager.AXIS_MINUS_Y,
+                    SensorManager.AXIS_X,
+                    remappedMatrix
+                )
+                else -> System.arraycopy(rotMatrix, 0, remappedMatrix, 0, rotMatrix.size)
+            }
+
+            SensorManager.getOrientation(remappedMatrix, orientation)
             val pitch = Math.toDegrees(orientation[1].toDouble()).toFloat()
             val roll  = Math.toDegrees(orientation[2].toDouble()).toFloat()
             onOrientationChanged?.invoke(pitch, roll)

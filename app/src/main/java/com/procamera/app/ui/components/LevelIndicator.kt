@@ -79,47 +79,26 @@ fun LevelIndicator(
         val sinR = sin(rollRad).toFloat()
         val dx = barLen * cosR
         val dy = barLen * sinR
-        // Pitch offset: shift bar vertically based on pitch
-        val pitchOffset = pitch.coerceIn(-30f, 30f) * (size.height / 180f)
-        val pitchDx = -pitchOffset * sinR
-        val pitchDy =  pitchOffset * cosR
-        val bCx = cx + pitchDx
-        val bCy = cy + pitchDy
+        val barCenter = Offset(cx, cy)
         drawLine(
             color = levelColor.copy(alpha = alpha),
-            start = Offset(bCx - dx, bCy - dy),
-            end   = Offset(bCx + dx, bCy + dy),
-            strokeWidth = 3f,
+            start = Offset(barCenter.x - dx, barCenter.y - dy),
+            end   = Offset(barCenter.x + dx, barCenter.y + dy),
+            strokeWidth = 4f,
             cap = StrokeCap.Round
-        )
-        // Gap in centre
-        drawLine(
-            color = Color.Transparent,
-            start = Offset(bCx - 16f * cosR, bCy - 16f * sinR),
-            end   = Offset(bCx + 16f * cosR, bCy + 16f * sinR),
-            strokeWidth = 6f
         )
 
         // ── Centre reticle ─────────────────────────────────────────────────────
-        val cs = 10f
+        val cs = 12f
         drawLine(levelColor.copy(alpha = alpha),
-            start = Offset(cx - cs, cy), end = Offset(cx + cs, cy), strokeWidth = 2f)
+            start = Offset(cx - cs, cy), end = Offset(cx + cs, cy), strokeWidth = 3f)
         drawLine(levelColor.copy(alpha = alpha),
-            start = Offset(cx, cy - cs), end = Offset(cx, cy + cs), strokeWidth = 2f)
+            start = Offset(cx, cy - cs), end = Offset(cx, cy + cs), strokeWidth = 3f)
         drawCircle(
             color = levelColor.copy(alpha = 0.4f),
-            radius = 4f,
+            radius = 5f,
             center = Offset(cx, cy),
             style = Stroke(width = 2f)
         )
-
-        // ── Roll / pitch readout dots ──────────────────────────────────────────
-        if (abs(roll) > 1.5f || abs(pitch) > 1.5f) {
-            drawCircle(
-                color = levelColor,
-                radius = 5f,
-                center = Offset(bCx, bCy)
-            )
-        }
     }
 }

@@ -290,9 +290,6 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun toggleManualControls() = _uiState.update { it.copy(showManualControls = !it.showManualControls) }
     fun toggleHistogram()      = _uiState.update { it.copy(showHistogram = !it.showHistogram) }
     fun toggleLevelIndicator() = _uiState.update { it.copy(showLevelIndicator = !it.showLevelIndicator) }
-    fun toggleFocusPeaking()   = _uiState.update { it.copy(showFocusPeaking = !it.showFocusPeaking) }
-    fun toggleZebra()          = _uiState.update { it.copy(showZebra = !it.showZebra) }
-
     // ─── Stop camera ──────────────────────────────────────────────────────────
 
     fun stopCamera() {

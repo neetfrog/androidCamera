@@ -73,14 +73,6 @@ fun CameraScreen(viewModel: CameraViewModel) {
                     modifier = Modifier.fillMaxSize()
                 )
 
-                if (state.showFocusPeaking) {
-                    FocusPeakingOverlay(modifier = Modifier.fillMaxSize())
-                }
-
-                if (state.showZebra) {
-                    ZebraOverlay(modifier = Modifier.fillMaxSize())
-                }
-
                 // ── Level indicator ────────────────────────────────────────────────
                 if (state.showLevelIndicator) {
                     LevelIndicator(
@@ -235,56 +227,6 @@ private fun HudValue(label: String, value: String, highlight: Boolean = false) {
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold
         )
-    }
-}
-
-@Composable
-private fun FocusPeakingOverlay(modifier: Modifier = Modifier) {
-    val stroke = 2.dp
-    val crossSize = 28.dp
-    val density = LocalDensity.current
-
-    Canvas(modifier = modifier) {
-        drawRect(
-            color = Color(0x2200FF00),
-            size = size
-        )
-
-        val strokePx = with(density) { stroke.toPx() }
-        val crossPx = with(density) { crossSize.toPx() }
-        val centerX = size.width / 2
-        val centerY = size.height / 2
-
-        drawLine(
-            color = Color.Green.copy(alpha = 0.85f),
-            start = Offset(centerX - crossPx, centerY),
-            end = Offset(centerX + crossPx, centerY),
-            strokeWidth = strokePx
-        )
-        drawLine(
-            color = Color.Green.copy(alpha = 0.85f),
-            start = Offset(centerX, centerY - crossPx),
-            end = Offset(centerX, centerY + crossPx),
-            strokeWidth = strokePx
-        )
-    }
-}
-
-@Composable
-private fun ZebraOverlay(modifier: Modifier = Modifier) {
-    val stripeHeight = 16.dp
-    val density = LocalDensity.current
-    Canvas(modifier = modifier) {
-        val stripePx = with(density) { stripeHeight.toPx() }
-        var y = 0f
-        while (y < size.height) {
-            drawRect(
-                color = Color.Yellow.copy(alpha = 0.12f),
-                topLeft = Offset(0f, y),
-                size = Size(size.width, stripePx)
-            )
-            y += stripePx * 2f
-        }
     }
 }
 
