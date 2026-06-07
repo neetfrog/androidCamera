@@ -1,6 +1,6 @@
 ﻿# RawSnap
 
-RawSnap is a compact Camera2 demo app built with **Jetpack Compose**.
+RawSnap is a compact Camera2 API app that let's you take RAW images.
 
 It supports:
 - Photo capture (JPEG)
