@@ -52,7 +52,7 @@ fun CameraScreen(viewModel: CameraViewModel) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(filmPresetConfig.colorShift.copy(alpha = 0.08f))
+                    .background(filmPresetConfig.colorShift.copy(alpha = 0.25f))
             )
         }
 

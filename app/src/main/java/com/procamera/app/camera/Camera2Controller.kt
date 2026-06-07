@@ -2,18 +2,19 @@ package com.procamera.app.camera
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.ContentValues
 import android.graphics.ImageFormat
 import android.graphics.Rect
 import android.hardware.camera2.*
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
 import android.hardware.camera2.params.TonemapCurve
-//import android.media.DngCreator
 import android.media.Image
 import android.media.ImageReader
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
+import android.provider.MediaStore
 import android.util.Log
 import android.util.Size
 import android.view.Surface
@@ -485,11 +486,33 @@ class Camera2Controller(private val context: Context) {
         try {
             val buf = image.planes[0].buffer
             val bytes = ByteArray(buf.remaining()).also { buf.get(it) }
-            val file = createOutputFile("IMG", "jpg", android.os.Environment.DIRECTORY_DCIM)
-            file.writeBytes(bytes)
-            onPhotoSaved?.invoke(file)
+            
+            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmssSSS", Locale.US).format(Date())
+            val fileName = "IMG_$timeStamp.jpg"
+            
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, "DCIM/ProCamera")
+                }
+            }
+            
+            val uri = context.contentResolver.insert(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                contentValues
+            ) ?: throw Exception("Failed to create MediaStore entry")
+            
+            context.contentResolver.openOutputStream(uri)?.use { stream ->
+                stream.write(bytes)
+                stream.flush()
+            }
+            
+            Log.d(TAG, "Photo saved: $fileName")
+            onPhotoSaved?.invoke(File(fileName))
         } catch (e: Exception) {
-            Log.e(TAG, "saveJpeg failed", e)
+            Log.e(TAG, "saveJpeg failed: ${e.message}", e)
+            onError?.invoke("Failed to save photo: ${e.message}")
         } finally {
             image.close()
         }
@@ -499,11 +522,37 @@ class Camera2Controller(private val context: Context) {
 
     private fun saveRaw(image: Image, result: TotalCaptureResult) {
         try {
-            // DNG support not available - skipping RAW save
-            Log.d(TAG, "DNG format not available, skipping RAW save")
-            image.close()
+            val buf = image.planes[0].buffer
+            val bytes = ByteArray(buf.remaining()).also { buf.get(it) }
+            
+            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmssSSS", Locale.US).format(Date())
+            val fileName = "RAW_$timeStamp.dng"
+            
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "image/x-canon-dng")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, "DCIM/ProCamera")
+                }
+            }
+            
+            val uri = context.contentResolver.insert(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                contentValues
+            ) ?: throw Exception("Failed to create MediaStore entry for RAW")
+            
+            context.contentResolver.openOutputStream(uri)?.use { stream ->
+                stream.write(bytes)
+                stream.flush()
+            }
+            
+            Log.d(TAG, "RAW DNG saved: $fileName")
+            onRawSaved?.invoke(File(fileName))
         } catch (e: Exception) {
-            Log.e(TAG, "saveRaw failed", e)
+            Log.e(TAG, "saveRaw failed: ${e.message}", e)
+            onError?.invoke("Failed to save RAW: ${e.message}")
+        } finally {
+            image.close()
         }
     }
 

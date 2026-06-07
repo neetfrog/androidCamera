@@ -36,7 +36,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             viewModelScope.launch { delay(2500); _uiState.update { it.copy(savedMessage = null) } }
         }
         camera2.onRawSaved = { file ->
-            _uiState.update { it.copy(savedMessage = "RAW: ${file.name}") }
+            _uiState.update { it.copy(isCapturing = false, savedMessage = "RAW: ${file.name}") }
             viewModelScope.launch { delay(2500); _uiState.update { it.copy(savedMessage = null) } }
         }
         camera2.onError = { msg ->

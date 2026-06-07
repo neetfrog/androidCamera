@@ -1,8 +1,10 @@
 package com.procamera.app.camera
 
 import android.content.Context
+import android.content.ContentValues
 import android.media.MediaRecorder
 import android.os.Build
+import android.provider.MediaStore
 import android.util.Log
 import android.view.Surface
 import com.procamera.app.data.VideoResolution
@@ -86,13 +88,36 @@ class VideoRecorder(private val context: Context) {
                 stop()
                 reset()
             }
-            currentFile?.also { onVideoSaved?.invoke(it) }
+            currentFile?.also { file ->
+                // Register with MediaStore so it appears in Gallery
+                registerVideoWithMediaStore(file)
+                onVideoSaved?.invoke(file)
+            }
         } catch (e: RuntimeException) {
             Log.e(TAG, "stop error (recording too short?)", e)
             currentFile?.delete()
             null
         } finally {
             release()
+        }
+    }
+
+    private fun registerVideoWithMediaStore(videoFile: File) {
+        try {
+            val values = ContentValues().apply {
+                put(MediaStore.Video.Media.TITLE, videoFile.nameWithoutExtension)
+                put(MediaStore.Video.Media.DISPLAY_NAME, videoFile.name)
+                put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+                put(MediaStore.Video.Media.DATA, videoFile.absolutePath)
+                put(MediaStore.Video.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/ProCamera")
+                }
+            }
+            context.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+            Log.d(TAG, "Video registered: ${videoFile.name}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to register video: ${e.message}")
         }
     }
 
