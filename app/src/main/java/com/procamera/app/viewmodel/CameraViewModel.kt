@@ -1,8 +1,11 @@
 package com.procamera.app.viewmodel
 
 import android.app.Application
+import android.content.Context
 import android.graphics.SurfaceTexture
+import android.hardware.camera2.CameraCharacteristics
 import android.view.Surface
+import android.view.WindowManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.procamera.app.camera.Camera2Controller
@@ -160,6 +163,29 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     // ─── Video recording ──────────────────────────────────────────────────────
 
+    private fun getDisplayRotationDegrees(): Int {
+        val wm = getApplication<Application>().getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        return when (wm.defaultDisplay.rotation) {
+            Surface.ROTATION_0 -> 0
+            Surface.ROTATION_90 -> 90
+            Surface.ROTATION_180 -> 180
+            Surface.ROTATION_270 -> 270
+            else -> 0
+        }
+    }
+
+    private fun getVideoOrientationHint(): Int {
+        val sensorOrientation = camera2.getCurrentSensorOrientation() ?: 90
+        val lensFacing = camera2.getCurrentLensFacing() ?: CameraCharacteristics.LENS_FACING_BACK
+        val rotation = getDisplayRotationDegrees()
+
+        return if (lensFacing == CameraCharacteristics.LENS_FACING_FRONT) {
+            (sensorOrientation + rotation) % 360
+        } else {
+            (sensorOrientation - rotation + 360) % 360
+        }
+    }
+
     fun startVideoRecording() {
         if (_uiState.value.isRecording) return
         viewModelScope.launch(Dispatchers.IO) {
@@ -168,7 +194,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 val recSurf = videoRecorder.prepare(
                     resolution = state.settings.videoResolution,
                     frameRate = state.settings.frameRate,
-                    audioEnabled = true
+                    audioEnabled = true,
+                    orientationHint = getVideoOrientationHint()
                 )
                 recordingSurface = recSurf
 

@@ -91,6 +91,10 @@ class Camera2Controller(private val context: Context) {
         return CameraCapabilities(hasRaw, maxZoom, minFocus)
     }
 
+    fun getCurrentSensorOrientation(): Int? = cameraCharacteristics?.get(CameraCharacteristics.SENSOR_ORIENTATION)
+
+    fun getCurrentLensFacing(): Int? = cameraCharacteristics?.get(CameraCharacteristics.LENS_FACING)
+
     fun choosePreviewSize(targetWidth: Int, targetHeight: Int): Size {
         val chars = cameraCharacteristics ?: return Size(max(targetWidth, 1920), max(targetHeight, 1080))
         val streamMap = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)

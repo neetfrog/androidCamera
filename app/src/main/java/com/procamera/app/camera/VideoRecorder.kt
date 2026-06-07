@@ -43,7 +43,8 @@ class VideoRecorder(private val context: Context) {
     fun prepare(
         resolution: VideoResolution = VideoResolution.FHD_1080P,
         frameRate: Int = 30,
-        audioEnabled: Boolean = true
+        audioEnabled: Boolean = true,
+        orientationHint: Int? = null
     ): Surface {
         release()
 
@@ -70,6 +71,7 @@ class VideoRecorder(private val context: Context) {
             }
             setVideoSource(MediaRecorder.VideoSource.SURFACE)
             setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            orientationHint?.let { setOrientationHint(it) }
 
             if (audioEnabled) {
                 setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
