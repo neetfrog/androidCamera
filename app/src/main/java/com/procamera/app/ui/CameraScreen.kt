@@ -1,5 +1,6 @@
 package com.procamera.app.ui
 
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -34,11 +35,18 @@ fun CameraScreen(viewModel: CameraViewModel) {
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // ── Full-screen preview ────────────────────────────────────────────────
-        ViewfinderSurface(
-            modifier = Modifier.fillMaxSize(),
-            viewModel = viewModel
-        )
+        // ── Full-screen preview with aspect ratio constraint ────────────────
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(4f / 3f)  // Standard camera preview aspect ratio
+                .align(Alignment.TopCenter)
+        ) {
+            ViewfinderSurface(
+                modifier = Modifier.fillMaxSize(),
+                viewModel = viewModel
+            )
+        }
 
         // ── Grid overlay ───────────────────────────────────────────────────────
         GridOverlay(

@@ -60,11 +60,9 @@ private fun ProCameraApp() {
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
         hasPermissions = results.values.all { it }
-        if (hasPermissions) {
-            viewModel.initCamera(isFront = false)
-        }
     }
 
+    // Initialize camera when permissions are granted
     LaunchedEffect(hasPermissions) {
         if (hasPermissions) {
             viewModel.initCamera(isFront = false)

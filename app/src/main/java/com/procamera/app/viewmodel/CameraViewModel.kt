@@ -132,7 +132,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private fun executeCapture() {
+    fun executeCapture() {
         val state = _uiState.value
         _uiState.update { it.copy(isCapturing = true) }
         val captureRaw = state.captureMode == CaptureMode.RAW
