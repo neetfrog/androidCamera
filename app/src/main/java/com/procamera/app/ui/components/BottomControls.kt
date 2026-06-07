@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -173,6 +174,7 @@ fun CaptureButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var pressed by remember { mutableStateOf(false) }
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulse by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -184,26 +186,36 @@ fun CaptureButton(
         label = "pulse"
     )
 
+    LaunchedEffect(pressed) {
+        if (pressed) {
+            delay(120)
+            pressed = false
+        }
+    }
+
+    val backgroundColor = when {
+        isRecording -> RecordRed
+        pressed && !isVideo -> Color(0xFFEA4335)
+        isVideo -> Color(0xDDEF4444)
+        else -> Color(0xDDFFFFFF)
+    }
+    val borderColor = when {
+        isRecording -> RecordRed.copy(alpha = 0.5f)
+        pressed && !isVideo -> Color(0xFFFFB3B3)
+        isVideo -> RecordRed.copy(alpha = 0.4f)
+        else -> Color(0x55FFFFFF)
+    }
+
     Box(
         modifier = modifier
             .size((76 * pulse).dp)
             .clip(CircleShape)
-            .background(
-                when {
-                    isRecording -> RecordRed
-                    isVideo     -> Color(0xDDEF4444)
-                    else        -> Color(0xDDFFFFFF)
-                }
-            )
-            .border(3.dp,
-                when {
-                    isRecording -> RecordRed.copy(alpha = 0.5f)
-                    isVideo     -> RecordRed.copy(alpha = 0.4f)
-                    else        -> Color(0x55FFFFFF)
-                },
-                CircleShape
-            )
-            .clickable(enabled = !isCapturing, onClick = onClick),
+            .background(backgroundColor)
+            .border(3.dp, borderColor, CircleShape)
+            .clickable(enabled = !isCapturing, onClick = {
+                pressed = true
+                onClick()
+            }),
         contentAlignment = Alignment.Center
     ) {
         when {
@@ -249,29 +261,31 @@ fun ZoomControl(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.padding(bottom = 4.dp)
         ) {
-            listOf(minZoom, 1f, 2f, 4f, 8f).forEach { preset ->
-                if (preset in minZoom..maxZoom) {
-                    val label = when {
-                        preset == minZoom && preset != 1f -> "${"%.1f".format(preset)}×"
-                        preset < 2f -> "1×"
-                        else -> "${preset.toInt()}×"
-                    }
-                    val sel = kotlin.math.abs(zoom - preset) < 0.15f
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(
-                                if (sel) OrangePrimary else Color(0x33FFFFFF)
-                            )
-                            .clickable { onZoomChange(preset) }
-                            .padding(horizontal = 10.dp, vertical = 3.dp)
-                    ) {
-                        Text(
-                            text = label,
-                            color = if (sel) Color.Black else Color.White,
-                            fontSize = 11.sp
+            val presets = listOf(minZoom, 1f, 2f, 4f, 8f)
+                .filter { it in minZoom..maxZoom }
+                .distinctBy { ((it * 100f) + 0.5f).toInt() }
+
+            presets.forEach { preset ->
+                val label = when {
+                    preset == minZoom && preset != 1f -> "${"%.1f".format(preset)}×"
+                    preset < 2f -> "1×"
+                    else -> "${preset.toInt()}×"
+                }
+                val sel = kotlin.math.abs(zoom - preset) < 0.15f
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            if (sel) OrangePrimary else Color(0x33FFFFFF)
                         )
-                    }
+                        .clickable { onZoomChange(preset) }
+                        .padding(horizontal = 10.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = label,
+                        color = if (sel) Color.Black else Color.White,
+                        fontSize = 11.sp
+                    )
                 }
             }
         }

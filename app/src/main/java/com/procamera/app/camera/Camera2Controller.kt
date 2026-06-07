@@ -6,6 +6,7 @@ import android.content.ContentValues
 import android.graphics.ImageFormat
 import android.graphics.Rect
 import android.hardware.camera2.*
+import android.hardware.camera2.params.MeteringRectangle
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
 import android.hardware.camera2.params.TonemapCurve
@@ -490,6 +491,63 @@ class Camera2Controller(private val context: Context) {
             else if (settings.isAutoExposure) CameraMetadata.NOISE_REDUCTION_MODE_FAST
             else CameraMetadata.NOISE_REDUCTION_MODE_MINIMAL
         )
+    }
+
+    fun focusAtPoint(
+        x: Float,
+        y: Float,
+        viewWidth: Int,
+        viewHeight: Int,
+        settings: CameraSettings
+    ) {
+        val session = captureSession ?: return
+        val device = cameraDevice ?: return
+        val chars = cameraCharacteristics ?: return
+        val sensorRect = chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE) ?: return
+
+        val focusX = ((x / viewWidth) * sensorRect.width()).toInt().coerceIn(sensorRect.left, sensorRect.right)
+        val focusY = ((y / viewHeight) * sensorRect.height()).toInt().coerceIn(sensorRect.top, sensorRect.bottom)
+        val areaSize = (min(sensorRect.width(), sensorRect.height()) / 10).coerceAtLeast(50)
+        val left = (focusX - areaSize / 2).coerceIn(sensorRect.left, sensorRect.right - areaSize)
+        val top = (focusY - areaSize / 2).coerceIn(sensorRect.top, sensorRect.bottom - areaSize)
+        val focusArea = MeteringRectangle(Rect(left, top, left + areaSize, top + areaSize), MeteringRectangle.METERING_WEIGHT_MAX)
+
+        try {
+            val req = device.createCaptureRequest(
+                if (isVideoCaptureSession) CameraDevice.TEMPLATE_RECORD
+                else CameraDevice.TEMPLATE_PREVIEW
+            ).apply {
+                previewSurface?.let { addTarget(it) }
+                analysisImageReader?.surface?.let { addTarget(it) }
+
+                if (settings.isAutoFocus) {
+                    applySettings(this, settings, isVideo = isVideoCaptureSession)
+                    set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(focusArea))
+                    set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(focusArea))
+                    set(CaptureRequest.CONTROL_AF_MODE,
+                        if (isVideoCaptureSession) CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_VIDEO
+                        else CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE
+                    )
+                    set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START)
+                } else {
+                    applySettings(this, settings, isVideo = isVideoCaptureSession)
+                    set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_OFF)
+                    set(CaptureRequest.LENS_FOCUS_DISTANCE, settings.focusDistance)
+                }
+            }.build()
+
+            session.capture(req, object : CameraCaptureSession.CaptureCallback() {
+                override fun onCaptureCompleted(
+                    session: CameraCaptureSession,
+                    request: CaptureRequest,
+                    result: TotalCaptureResult
+                ) {
+                    updateSettings(settings)
+                }
+            }, cameraHandler)
+        } catch (e: CameraAccessException) {
+            Log.e(TAG, "focusAtPoint failed", e)
+        }
     }
 
     private fun applyZoom(

@@ -43,6 +43,9 @@ fun ViewfinderSurface(
             }
             .pointerInput(Unit) {
                 detectTapGestures(
+                    onTap = { offset ->
+                        viewModel.focusAtPoint(offset.x, offset.y, size.width, size.height)
+                    },
                     onDoubleTap = { viewModel.toggleCamera() }
                 )
             }

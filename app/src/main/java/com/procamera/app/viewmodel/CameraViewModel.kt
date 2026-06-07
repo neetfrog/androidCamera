@@ -299,6 +299,24 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         updateSetting { it.copy(zoomRatio = zoom) }
     }
 
+    fun focusAtPoint(x: Float, y: Float, width: Int, height: Int) {
+        val state = _uiState.value
+        val settings = state.settings
+        if (!camera2.isCameraOpen || settings.isAutoFocus) return
+
+        val maxFocus = state.minFocusDistance.coerceAtLeast(0.1f)
+        val normalized = (y / height).coerceIn(0f, 1f)
+        val focusDistance = (normalized * maxFocus).coerceIn(0f, maxFocus)
+        val newSettings = settings.copy(focusDistance = focusDistance)
+
+        _uiState.update { it.copy(settings = newSettings) }
+        camera2.updateSettings(newSettings)
+
+        viewModelScope.launch(Dispatchers.IO) {
+            camera2.focusAtPoint(x, y, width, height, newSettings)
+        }
+    }
+
     fun setCaptureMode(mode: CaptureMode) {
         _uiState.update { it.copy(captureMode = mode) }
     }
