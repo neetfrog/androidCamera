@@ -13,6 +13,7 @@ import com.procamera.app.camera.OrientationSensor
 import com.procamera.app.camera.VideoRecorder
 import com.procamera.app.data.*
 import kotlinx.coroutines.*
+import kotlin.math.abs
 import kotlinx.coroutines.flow.*
 
 class CameraViewModel(application: Application) : AndroidViewModel(application) {
@@ -170,7 +171,25 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val state = _uiState.value
         _uiState.update { it.copy(isCapturing = true) }
         val captureRaw = state.captureMode == CaptureMode.RAW
-        camera2.capturePhoto(state.settings, captureRaw)
+        val orientationDegrees = getDeviceOrientationDegrees()
+        camera2.capturePhoto(state.settings, captureRaw, orientationDegrees)
+    }
+
+    private fun getDeviceOrientationDegrees(): Int {
+        val state = _uiState.value
+        val pitch = state.pitch
+        val roll = state.roll
+
+        // If the device is nearly flat, default to portrait.
+        if (abs(pitch) > 70f) return 0
+
+        val normalizedRoll = ((roll % 360) + 360) % 360
+        return when {
+            normalizedRoll <= 45f || normalizedRoll >= 315f -> 0
+            normalizedRoll <= 135f -> 90
+            normalizedRoll <= 225f -> 180
+            else -> 270
+        }
     }
 
     // ─── Video recording ──────────────────────────────────────────────────────

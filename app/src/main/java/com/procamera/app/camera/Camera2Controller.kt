@@ -22,6 +22,7 @@ import android.graphics.SurfaceTexture
 import android.util.Log
 import android.util.Size
 import android.view.Surface
+import android.view.WindowManager
 import com.procamera.app.data.*
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
@@ -64,6 +65,8 @@ class Camera2Controller(private val context: Context) {
 
     @Volatile
     private var pendingCaptureResult: TotalCaptureResult? = null
+    @Volatile
+    private var pendingCaptureOrientationDegrees: Int = 0
 
     val isCameraOpen: Boolean get() = cameraDevice != null
 
@@ -226,7 +229,7 @@ class Camera2Controller(private val context: Context) {
                 it.setOnImageAvailableListener({ reader ->
                     reader.acquireLatestImage()?.let { img ->
                         val result = pendingCaptureResult
-                        if (result != null) saveRaw(img, result) else img.close()
+                        if (result != null) saveRaw(img, result, pendingCaptureOrientationDegrees) else img.close()
                     }
                 }, cameraHandler)
                 surfaces.add(it.surface)
@@ -589,11 +592,45 @@ class Camera2Controller(private val context: Context) {
         }
     }
 
+    private fun getDisplayRotationDegrees(): Int {
+        val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return 0
+        return when (wm.defaultDisplay.rotation) {
+            Surface.ROTATION_0 -> 0
+            Surface.ROTATION_90 -> 90
+            Surface.ROTATION_180 -> 180
+            Surface.ROTATION_270 -> 270
+            else -> 0
+        }
+    }
+
+    private fun getPhotoOrientation(deviceOrientationDegrees: Int): Int {
+        val sensorOrientation = cameraCharacteristics?.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
+        val lensFacing = cameraCharacteristics?.get(CameraCharacteristics.LENS_FACING)
+            ?: CameraCharacteristics.LENS_FACING_BACK
+
+        return if (lensFacing == CameraCharacteristics.LENS_FACING_FRONT) {
+            (sensorOrientation + deviceOrientationDegrees) % 360
+        } else {
+            (sensorOrientation - deviceOrientationDegrees + 360) % 360
+        }
+    }
+
+    private fun getPhotoExifOrientation(photoDegrees: Int): Int {
+        return when ((photoDegrees % 360 + 360) % 360) {
+            0 -> 1
+            90 -> 6
+            180 -> 3
+            270 -> 8
+            else -> 1
+        }
+    }
+
     // ─── Photo capture ────────────────────────────────────────────────────────
 
-    fun capturePhoto(settings: CameraSettings, captureRaw: Boolean) {
+    fun capturePhoto(settings: CameraSettings, captureRaw: Boolean, deviceOrientationDegrees: Int) {
         val session = captureSession ?: return
         val device = cameraDevice ?: return
+        pendingCaptureOrientationDegrees = deviceOrientationDegrees
 
         try {
             val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
@@ -614,7 +651,7 @@ class Camera2Controller(private val context: Context) {
                     Log.d(TAG, "JPEG mode: Adding JPEG surface")
                     addTarget(jpeg)
                     set(CaptureRequest.JPEG_QUALITY, 95.toByte())
-                    set(CaptureRequest.JPEG_ORIENTATION, 90)
+                    set(CaptureRequest.JPEG_ORIENTATION, getPhotoOrientation(deviceOrientationDegrees))
                 }
                 
                 applySettings(this, settings, isVideo = false)
@@ -718,7 +755,7 @@ class Camera2Controller(private val context: Context) {
 
     // ─── Save RAW / DNG ───────────────────────────────────────────────────────
 
-    private fun saveRaw(image: Image, result: TotalCaptureResult) {
+    private fun saveRaw(image: Image, result: TotalCaptureResult, deviceOrientationDegrees: Int) {
         try {
             if (image.format != ImageFormat.RAW_SENSOR) {
                 throw Exception("Image format is ${image.format}, not RAW_SENSOR")
@@ -745,6 +782,7 @@ class Camera2Controller(private val context: Context) {
 
                 context.contentResolver.openOutputStream(uri)?.use { output ->
                     DngCreator(chars, result).use { dngCreator ->
+                        dngCreator.setOrientation(getPhotoExifOrientation(getPhotoOrientation(deviceOrientationDegrees)))
                         dngCreator.writeImage(output, image)
                     }
                 } ?: throw Exception("Could not open output stream")
@@ -764,6 +802,7 @@ class Camera2Controller(private val context: Context) {
                 val outputFile = File(folder, fileName)
                 outputFile.outputStream().use { output ->
                     DngCreator(chars, result).use { dngCreator ->
+                        dngCreator.setOrientation(getPhotoExifOrientation(getPhotoOrientation(deviceOrientationDegrees)))
                         dngCreator.writeImage(output, image)
                     }
                 }
