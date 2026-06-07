@@ -427,6 +427,9 @@ class Camera2Controller(private val context: Context) {
 
         try {
             val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
+                // Always include preview surface to maintain camera session stability
+                previewSurface?.let { addTarget(it) }
+                
                 // Mutually exclusive: RAW OR JPEG, not both
                 if (captureRaw) {
                     if (rawImageReader?.surface != null) {
@@ -539,55 +542,55 @@ class Camera2Controller(private val context: Context) {
 
     private fun saveRaw(image: Image, result: TotalCaptureResult) {
         try {
-            if (image.format != ImageFormat.RAW_SENSOR) {
-                Log.w(TAG, "saveRaw: Unexpected format ${image.format}, expected ${ImageFormat.RAW_SENSOR}")
-            }
+            Log.d(TAG, "saveRaw START: width=${image.width}, height=${image.height}")
             
-            Log.d(TAG, "saveRaw START: format=${image.format}, width=${image.width}, height=${image.height}, planes=${image.planes.size}")
-            
-            // RAW_SENSOR is typically single-plane 16-bit Bayer
-            val plane = image.planes[0]
-            val buffer = plane.buffer.duplicate().also { it.rewind() }
-            
-            val pixelStride = plane.pixelStride
-            
-            Log.d(TAG, "RAW buffer: pixelStride=$pixelStride, bufferCapacity=${buffer.capacity()}, bufferRemaining=${buffer.remaining()}")
-            
-            // Read all available bytes
-            val bytes = ByteArray(buffer.remaining())
-            buffer.get(bytes)
-            
-            Log.d(TAG, "RAW data read: ${bytes.size} bytes")
-            
-            if (bytes.isEmpty() || bytes.all { it == 0.toByte() }) {
-                Log.w(TAG, "WARNING: RAW data appears empty or all zeros!")
-            }
-            
-            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmssSSS", Locale.US).format(Date())
-            val fileName = "RAW_$timeStamp.dng"
-            
-            val contentValues = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                put(MediaStore.MediaColumns.MIME_TYPE, "image/x-canon-dng")
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, "DCIM/ProCamera")
+            // Use Android's DngCreator to write proper DNG file (API 21+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                val chars = cameraCharacteristics ?: throw Exception("No camera characteristics")
+                
+                // Use reflection to access DngCreator
+                val dngCreatorClass = Class.forName("android.media.DngCreator")
+                val constructor = dngCreatorClass.getConstructor(
+                    CameraCharacteristics::class.java,
+                    CaptureResult::class.java
+                )
+                val dngCreator = constructor.newInstance(chars, result)
+                
+                val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmssSSS", Locale.US).format(Date())
+                val fileName = "RAW_$timeStamp.dng"
+                
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "image/x-adobe-dng")
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        put(MediaStore.MediaColumns.RELATIVE_PATH, "DCIM/ProCamera")
+                    }
                 }
+                
+                val uri = context.contentResolver.insert(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    contentValues
+                ) ?: throw Exception("Failed to create MediaStore entry for RAW")
+                
+                context.contentResolver.openOutputStream(uri)?.use { stream ->
+                    // Use reflection to call writeImage
+                    val writeImageMethod = dngCreatorClass.getMethod(
+                        "writeImage",
+                        java.io.OutputStream::class.java,
+                        Image::class.java
+                    )
+                    writeImageMethod.invoke(dngCreator, stream, image)
+                }
+                
+                // Close the creator
+                val closeMethod = dngCreatorClass.getMethod("close")
+                closeMethod.invoke(dngCreator)
+                
+                Log.d(TAG, "RAW DNG saved: $fileName")
+                onRawSaved?.invoke(File(fileName))
+            } else {
+                throw Exception("DNG format requires Android 5.0+")
             }
-            
-            val uri = context.contentResolver.insert(
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                contentValues
-            ) ?: throw Exception("Failed to create MediaStore entry for RAW")
-            
-            var written = 0
-            context.contentResolver.openOutputStream(uri)?.use { stream ->
-                stream.write(bytes)
-                stream.flush()
-                written = bytes.size
-            }
-            
-            Log.d(TAG, "RAW DNG saved: $fileName (${bytes.size} bytes written=$written)")
-            onRawSaved?.invoke(File(fileName))
         } catch (e: Exception) {
             Log.e(TAG, "saveRaw failed: ${e.message}", e)
             e.printStackTrace()
