@@ -60,11 +60,11 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun initCamera(isFront: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val cameraId = if (isFront) camera2.getFrontCameraId() else camera2.getBackCameraId()
+                val cameraId = (if (isFront) camera2.getFrontCameraId() else camera2.getBackCameraId())
                     ?: throw IllegalStateException("No ${if (isFront) "front" else "back"} camera found")
 
                 camera2.closeCamera()
-                camera2.openCamera(cameraId)
+                camera2.openCamera(cameraId as String)
 
                 val caps = camera2.getCameraCapabilities(cameraId)
                 _uiState.update {

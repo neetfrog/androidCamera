@@ -8,7 +8,7 @@ import android.hardware.camera2.*
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
 import android.hardware.camera2.params.TonemapCurve
-import android.media.DngCreator
+//import android.media.DngCreator
 import android.media.Image
 import android.media.ImageReader
 import android.os.Build
@@ -351,8 +351,14 @@ class Camera2Controller(private val context: Context) {
 
         // ── Tonemap / LOG profile ─────────────────────────────────────────────
         if (settings.isLogColorSpace) {
-            builder.set(CaptureRequest.TONEMAP_MODE, CameraMetadata.TONEMAP_MODE_CURVE)
-            builder.set(CaptureRequest.TONEMAP_CURVE, buildLogTonemapCurve())
+            try {
+                // TONEMAP_MODE_CURVE = 2
+                builder.set(CaptureRequest.TONEMAP_MODE, 2)
+                builder.set(CaptureRequest.TONEMAP_CURVE, buildLogTonemapCurve())
+            } catch (e: Exception) {
+                Log.w(TAG, "Tonemap curve not supported: ${e.message}")
+                builder.set(CaptureRequest.TONEMAP_MODE, CameraMetadata.TONEMAP_MODE_FAST)
+            }
         } else {
             builder.set(CaptureRequest.TONEMAP_MODE, CameraMetadata.TONEMAP_MODE_FAST)
         }
@@ -493,16 +499,11 @@ class Camera2Controller(private val context: Context) {
 
     private fun saveRaw(image: Image, result: TotalCaptureResult) {
         try {
-            val chars = cameraCharacteristics ?: return
-            val dng = DngCreator(chars, result)
-            val file = createOutputFile("RAW", "dng", android.os.Environment.DIRECTORY_DCIM)
-            file.outputStream().use { dng.writeImage(it, image) }
-            dng.close()
-            onRawSaved?.invoke(file)
+            // DNG support not available - skipping RAW save
+            Log.d(TAG, "DNG format not available, skipping RAW save")
+            image.close()
         } catch (e: Exception) {
             Log.e(TAG, "saveRaw failed", e)
-        } finally {
-            image.close()
         }
     }
 

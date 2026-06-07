@@ -71,6 +71,6 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawHistogramChanne
     drawPath(
         path = linePath,
         color = color.copy(alpha = (color.alpha * 2f).coerceAtMost(1f)),
-        style = androidx.compose.ui.graphics.drawscope.Stroke(strokeWidth = 1.2f)
+        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.2f)
     )
 }
