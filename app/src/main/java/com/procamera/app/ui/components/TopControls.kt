@@ -125,8 +125,73 @@ fun TopControls(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        ExposureInfoRow(state = state)
+        ExposureInfoRow(
+            state = state,
+            viewModel = viewModel
+        )
     }
+}
+
+@Composable
+fun ExposureInfoRow(
+    state: CameraUiState,
+    viewModel: com.procamera.app.viewmodel.CameraViewModel
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ExposureChip(
+            icon = Icons.Default.Bolt,
+            text = if (state.settings.isAutoExposure) "AUTO" else state.settings.iso.toString(),
+            onClick = { viewModel.toggleAutoExposure() }
+        )
+        ExposureChip(
+            icon = Icons.Default.Timer,
+            text = if (state.settings.isAutoExposure) "AUTO" else formatShutterHud(state.settings.shutterSpeed),
+            onClick = { viewModel.toggleAutoExposure() }
+        )
+        ExposureChip(
+            icon = Icons.Default.WbAuto,
+            text = if (state.settings.isAutoWhiteBalance) "AWB" else "${state.settings.whiteBalanceKelvin}K",
+            onClick = { viewModel.toggleAutoWhiteBalance() }
+        )
+        ExposureChip(
+            icon = Icons.Default.TextFields,
+            text = if (state.settings.isAutoFocus) "AF" else "MF",
+            onClick = { viewModel.toggleAutoFocus() }
+        )
+    }
+}
+
+@Composable
+fun ExposureChip(icon: ImageVector, text: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0x22FFFFFF))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+        Text(
+            text = text,
+            color = Color.White,
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+private fun formatShutterHud(ss: Float): String = when {
+    ss >= 1f -> "1/${ss.toInt()}"
+    else     -> "${(1f / ss).toInt()}s"
 }
 
 @Composable
@@ -204,52 +269,3 @@ fun CameraSelector(
     }
 }
 
-@Composable
-private fun ExposureInfoRow(state: CameraUiState) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        ExposureChip(
-            icon = Icons.Default.Bolt,
-            text = if (state.settings.isAutoExposure) "AUTO" else state.settings.iso.toString()
-        )
-        ExposureChip(
-            icon = Icons.Default.Timer,
-            text = if (state.settings.isAutoExposure) "AUTO" else formatShutterHud(state.settings.shutterSpeed)
-        )
-        ExposureChip(
-            icon = Icons.Default.WbAuto,
-            text = if (state.settings.isAutoWhiteBalance) "AWB" else "${state.settings.whiteBalanceKelvin}K"
-        )
-    }
-}
-
-@Composable
-private fun ExposureChip(icon: ImageVector, text: String) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0x22FFFFFF))
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-        Text(
-            text = text,
-            color = Color.White,
-            fontSize = 11.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-private fun formatShutterHud(ss: Float): String = when {
-    ss >= 1f -> "1/${ss.toInt()}"
-    else     -> "${(1f / ss).toInt()}s"
-}

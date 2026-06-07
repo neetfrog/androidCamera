@@ -331,6 +331,18 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         updateSetting { it.copy(flashMode = next) }
     }
 
+    fun toggleAutoExposure() {
+        updateSetting { it.copy(isAutoExposure = !it.isAutoExposure) }
+    }
+
+    fun toggleAutoWhiteBalance() {
+        updateSetting { it.copy(isAutoWhiteBalance = !it.isAutoWhiteBalance) }
+    }
+
+    fun toggleAutoFocus() {
+        updateSetting { it.copy(isAutoFocus = !it.isAutoFocus) }
+    }
+
     fun cycleGrid() {
         val next = when (_uiState.value.gridMode) {
             GridMode.NONE   -> GridMode.THIRDS
