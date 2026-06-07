@@ -1,9 +1,13 @@
 package com.procamera.app.camera
 
-import android.content.Context
 import android.content.ContentValues
+import android.content.Context
 import android.media.MediaRecorder
+import android.media.MediaScannerConnection
+import android.net.Uri
 import android.os.Build
+import android.os.Environment
+import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.util.Log
 import android.view.Surface
@@ -20,8 +24,17 @@ class VideoRecorder(private val context: Context) {
 
     private var mediaRecorder: MediaRecorder? = null
     private var currentFile: File? = null
+    private var currentVideoUri: Uri? = null
+    private var currentVideoPfd: ParcelFileDescriptor? = null
+    private var currentDisplayName: String? = null
 
-    var onVideoSaved: ((File) -> Unit)? = null
+    data class VideoSaveResult(
+        val uri: Uri?,
+        val file: File?,
+        val displayName: String
+    )
+
+    var onVideoSaved: ((VideoSaveResult) -> Unit)? = null
 
     /**
      * Prepare the MediaRecorder and return its recording Surface.
@@ -41,7 +54,15 @@ class VideoRecorder(private val context: Context) {
             MediaRecorder()
         }
 
-        currentFile = createVideoFile()
+        currentDisplayName = createVideoDisplayName()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            currentVideoUri = createVideoUri(currentDisplayName!!)
+            currentVideoPfd = context.contentResolver.openFileDescriptor(currentVideoUri!!, "w")
+                ?: throw IllegalStateException("Unable to open video output descriptor")
+        } else {
+            currentFile = createVideoFile()
+        }
 
         recorder.apply {
             if (audioEnabled) {
@@ -66,7 +87,11 @@ class VideoRecorder(private val context: Context) {
             setVideoEncodingBitRate(bitrate)
             setVideoFrameRate(frameRate)
             setVideoSize(resolution.width, resolution.height)
-            setOutputFile(currentFile!!.absolutePath)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                setOutputFile(currentVideoPfd!!.fileDescriptor)
+            } else {
+                setOutputFile(currentFile!!.absolutePath)
+            }
             prepare()
         }
 
@@ -82,7 +107,7 @@ class VideoRecorder(private val context: Context) {
         }
     }
 
-    fun stop(): File? {
+    fun stop(): VideoSaveResult? {
         return try {
             mediaRecorder?.apply {
                 try {
@@ -93,21 +118,33 @@ class VideoRecorder(private val context: Context) {
                 }
                 reset()
             }
-            
-            currentFile?.also { file ->
-                // Give the system a brief moment to finalize the file
-                Thread.sleep(100)
-                
-                // Verify file exists and has content
-                if (file.exists() && file.length() > 1000) {  // At least 1KB
-                    Log.d(TAG, "Video file created: ${file.absolutePath} (${file.length()} bytes)")
-                    // Register with MediaStore so it appears in Gallery
-                    registerVideoWithMediaStore(file)
-                    onVideoSaved?.invoke(file)
-                    file
-                } else {
-                    Log.e(TAG, "Video file not created or empty: ${file.absolutePath} (size: ${file.length()})")
-                    null
+
+            // Give the system a brief moment to finalize the file
+            Thread.sleep(100)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                currentVideoUri?.let { uri ->
+                    currentVideoPfd?.close()
+                    currentVideoPfd = null
+                    finalizeVideoUri(uri)
+                    val name = currentDisplayName ?: uri.lastPathSegment.orEmpty()
+                    Log.d(TAG, "Video saved to MediaStore: $uri")
+                    val result = VideoSaveResult(uri, null, name)
+                    onVideoSaved?.invoke(result)
+                    result
+                }
+            } else {
+                currentFile?.let { file ->
+                    if (file.exists() && file.length() > 1000) {
+                        Log.d(TAG, "Video file created: ${file.absolutePath} (${file.length()} bytes)")
+                        scanVideoFile(file)
+                        val result = VideoSaveResult(null, file, file.name)
+                        onVideoSaved?.invoke(result)
+                        result
+                    } else {
+                        Log.e(TAG, "Video file not created or empty: ${file.absolutePath} (size: ${file.length()})")
+                        null
+                    }
                 }
             }
         } catch (e: RuntimeException) {
@@ -119,32 +156,51 @@ class VideoRecorder(private val context: Context) {
         }
     }
 
-    private fun registerVideoWithMediaStore(videoFile: File) {
-        try {
-            val values = ContentValues().apply {
-                put(MediaStore.Video.Media.TITLE, videoFile.nameWithoutExtension)
-                put(MediaStore.Video.Media.DISPLAY_NAME, videoFile.name)
-                put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                put(MediaStore.Video.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/ProCamera")
-                    put(MediaStore.Video.Media.IS_PENDING, 1)
-                } else {
-                    put(MediaStore.Video.Media.DATA, videoFile.absolutePath)
-                }
-            }
-
-            val uri = context.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
-            if (uri != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val updateValues = ContentValues().apply {
-                    put(MediaStore.Video.Media.IS_PENDING, 0)
-                }
-                context.contentResolver.update(uri, updateValues, null, null)
-            }
-            Log.d(TAG, "Video registered: ${videoFile.name}")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to register video: ${e.message}")
+    private fun createVideoUri(displayName: String): Uri {
+        val values = ContentValues().apply {
+            put(MediaStore.Video.Media.DISPLAY_NAME, displayName)
+            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+            put(MediaStore.Video.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
+            put(MediaStore.Video.Media.DATE_TAKEN, System.currentTimeMillis())
+            put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/ProCamera")
+            put(MediaStore.Video.Media.IS_PENDING, 1)
         }
+        return context.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+            ?: throw IllegalStateException("Unable to create MediaStore entry for video")
+    }
+
+    private fun finalizeVideoUri(videoUri: Uri) {
+        val updateValues = ContentValues().apply {
+            put(MediaStore.Video.Media.IS_PENDING, 0)
+        }
+        context.contentResolver.update(videoUri, updateValues, null, null)
+    }
+
+    private fun scanVideoFile(videoFile: File) {
+        MediaScannerConnection.scanFile(
+            context,
+            arrayOf(videoFile.absolutePath),
+            arrayOf("video/mp4"),
+            null
+        )
+    }
+
+    private fun createVideoFile(): File {
+        val publicMovies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+        val dir = File(publicMovies, "ProCamera").apply {
+            if (!exists() && !mkdirs()) {
+                Log.w(TAG, "Failed to create directory: ${absolutePath}")
+            }
+        }
+        val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val file = File(dir, "VID_$ts.mp4")
+        Log.d(TAG, "Video file path: ${file.absolutePath}")
+        return file
+    }
+
+    private fun createVideoDisplayName(): String {
+        val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        return "VID_$ts.mp4"
     }
 
     /**
@@ -159,21 +215,5 @@ class VideoRecorder(private val context: Context) {
             mediaRecorder?.release()
         } catch (_: Exception) {}
         mediaRecorder = null
-    }
-
-    private fun createVideoFile(): File {
-        val baseDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_MOVIES)
-            ?: throw IllegalStateException("Cannot access external movies directory")
-        val dir = File(baseDir, "ProCamera").apply { 
-            if (!exists()) {
-                if (!mkdirs()) {
-                    Log.w(TAG, "Failed to create directory: ${absolutePath}")
-                }
-            }
-        }
-        val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val file = File(dir, "VID_$ts.mp4")
-        Log.d(TAG, "Video file path: ${file.absolutePath}")
-        return file
     }
 }

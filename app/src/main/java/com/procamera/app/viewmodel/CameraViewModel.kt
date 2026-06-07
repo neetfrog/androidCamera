@@ -49,8 +49,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         camera2.onHistogramUpdate = { data ->
             _uiState.update { it.copy(histogramData = data) }
         }
-        videoRecorder.onVideoSaved = { file ->
-            _uiState.update { it.copy(savedMessage = "Video: ${file.name}") }
+        videoRecorder.onVideoSaved = { result ->
+            _uiState.update { it.copy(savedMessage = "Video: ${result.displayName}") }
             viewModelScope.launch { delay(3000); _uiState.update { it.copy(savedMessage = null) } }
         }
         orientationSensor.onOrientationChanged = { pitch, roll ->
