@@ -12,17 +12,6 @@ enum class CaptureMode(val label: String) {
 
 enum class GridMode { NONE, THIRDS, SQUARE, GOLDEN }
 
-enum class FilmPreset(val label: String) {
-    NONE("None"),
-    PORTRA_400("Portra 400"),
-    PORTRA_800("Portra 800"),
-    EKTAR_100("Ektar 100"),
-    TMAX_100("T-Max 100"),
-    TRIX_400("Tri-X"),
-    FUJI_ASTIA("Fuji Astia"),
-    VELVIA("Velvia 50")
-}
-
 enum class VideoResolution(val width: Int, val height: Int, val label: String) {
     HD_720P(1280, 720, "720p"),
     FHD_1080P(1920, 1080, "1080p"),
@@ -48,7 +37,6 @@ data class CameraSettings(
 
     // Color / Tone
     val isLogColorSpace: Boolean = false,
-    val filmPreset: FilmPreset = FilmPreset.NONE,
 
     // Stabilization
     val isStabilization: Boolean = true,

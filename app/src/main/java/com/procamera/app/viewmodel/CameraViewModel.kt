@@ -280,10 +280,6 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun toggleFocusPeaking()   = _uiState.update { it.copy(showFocusPeaking = !it.showFocusPeaking) }
     fun toggleZebra()          = _uiState.update { it.copy(showZebra = !it.showZebra) }
 
-    fun setFilmPreset(preset: FilmPreset) {
-        _uiState.update { it.copy(settings = it.settings.copy(filmPreset = preset)) }
-    }
-
     // ─── Stop camera ──────────────────────────────────────────────────────────
 
     fun stopCamera() {

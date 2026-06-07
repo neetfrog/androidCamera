@@ -64,16 +64,6 @@ fun CameraScreen(viewModel: CameraViewModel) {
                 modifier = Modifier.fillMaxSize()
             )
 
-            // ── Film preset overlay ────────────────────────────────────────────
-            val filmPresetConfig = com.procamera.app.data.FilmPresetsLibrary.getPreset(state.settings.filmPreset)
-            if (filmPresetConfig != null && state.settings.filmPreset != FilmPreset.NONE) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(filmPresetConfig.colorShift.copy(alpha = 0.25f))
-                )
-            }
-
             // ── Level indicator ────────────────────────────────────────────────
             if (state.showLevelIndicator) {
                 LevelIndicator(
@@ -170,15 +160,6 @@ fun CameraScreen(viewModel: CameraViewModel) {
                     modifier = Modifier.fillMaxWidth()
                 )
             }
-
-            // Film presets selector
-            FilmPresetsSelector(
-                selectedPreset = state.settings.filmPreset,
-                onPresetSelected = viewModel::setFilmPreset,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            )
 
             // Camera controls
             BottomControls(
