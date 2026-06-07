@@ -2,6 +2,7 @@ package com.procamera.app.ui
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -10,7 +11,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -18,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.procamera.app.data.*
 import com.procamera.app.ui.components.*
+import com.procamera.app.ui.components.ManualControls
 import com.procamera.app.ui.theme.OrangePrimary
 import com.procamera.app.ui.theme.RecordRed
 import com.procamera.app.viewmodel.CameraViewModel
@@ -44,6 +49,7 @@ fun CameraScreen(viewModel: CameraViewModel) {
         )
 
         // ── Preview area (fills available space) ────────────────────────────────
+        val previewAspectRatio = state.previewAspectRatio ?: (3f / 4f)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -53,7 +59,7 @@ fun CameraScreen(viewModel: CameraViewModel) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(3f / 4f)
+                    .aspectRatio(previewAspectRatio)
             ) {
                 // Preview surface
                 ViewfinderSurface(
@@ -66,6 +72,14 @@ fun CameraScreen(viewModel: CameraViewModel) {
                     gridMode = state.gridMode,
                     modifier = Modifier.fillMaxSize()
                 )
+
+                if (state.showFocusPeaking) {
+                    FocusPeakingOverlay(modifier = Modifier.fillMaxSize())
+                }
+
+                if (state.showZebra) {
+                    ZebraOverlay(modifier = Modifier.fillMaxSize())
+                }
 
                 // ── Level indicator ────────────────────────────────────────────────
                 if (state.showLevelIndicator) {
@@ -133,6 +147,16 @@ fun CameraScreen(viewModel: CameraViewModel) {
                             .padding(top = 60.dp)
                     )
                 }
+            }
+
+            if (state.showManualControls) {
+                ManualControls(
+                    state = state,
+                    viewModel = viewModel,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 4.dp)
+                )
             }
         }
 
@@ -211,6 +235,56 @@ private fun HudValue(label: String, value: String, highlight: Boolean = false) {
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold
         )
+    }
+}
+
+@Composable
+private fun FocusPeakingOverlay(modifier: Modifier = Modifier) {
+    val stroke = 2.dp
+    val crossSize = 28.dp
+    val density = LocalDensity.current
+
+    Canvas(modifier = modifier) {
+        drawRect(
+            color = Color(0x2200FF00),
+            size = size
+        )
+
+        val strokePx = with(density) { stroke.toPx() }
+        val crossPx = with(density) { crossSize.toPx() }
+        val centerX = size.width / 2
+        val centerY = size.height / 2
+
+        drawLine(
+            color = Color.Green.copy(alpha = 0.85f),
+            start = Offset(centerX - crossPx, centerY),
+            end = Offset(centerX + crossPx, centerY),
+            strokeWidth = strokePx
+        )
+        drawLine(
+            color = Color.Green.copy(alpha = 0.85f),
+            start = Offset(centerX, centerY - crossPx),
+            end = Offset(centerX, centerY + crossPx),
+            strokeWidth = strokePx
+        )
+    }
+}
+
+@Composable
+private fun ZebraOverlay(modifier: Modifier = Modifier) {
+    val stripeHeight = 16.dp
+    val density = LocalDensity.current
+    Canvas(modifier = modifier) {
+        val stripePx = with(density) { stripeHeight.toPx() }
+        var y = 0f
+        while (y < size.height) {
+            drawRect(
+                color = Color.Yellow.copy(alpha = 0.12f),
+                topLeft = Offset(0f, y),
+                size = Size(size.width, stripePx)
+            )
+            y += stripePx * 2f
+        }
     }
 }
 

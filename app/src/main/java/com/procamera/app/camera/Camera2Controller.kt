@@ -17,6 +17,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.HandlerThread
 import android.provider.MediaStore
+import android.graphics.SurfaceTexture
 import android.util.Log
 import android.util.Size
 import android.view.Surface
@@ -27,7 +28,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
-import kotlin.math.log10
+import kotlin.math.*
 
 class Camera2Controller(private val context: Context) {
 
@@ -88,6 +89,29 @@ class Camera2Controller(private val context: Context) {
         val maxZoom = chars.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM) ?: 1f
         val minFocus = chars.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
         return CameraCapabilities(hasRaw, maxZoom, minFocus)
+    }
+
+    fun choosePreviewSize(targetWidth: Int, targetHeight: Int): Size {
+        val chars = cameraCharacteristics ?: return Size(max(targetWidth, 1920), max(targetHeight, 1080))
+        val streamMap = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            ?: return Size(max(targetWidth, 1920), max(targetHeight, 1080))
+
+        val sizes = streamMap.getOutputSizes(SurfaceTexture::class.java)?.toList()
+            ?: return Size(max(targetWidth, 1920), max(targetHeight, 1080))
+
+        if (sizes.isEmpty()) {
+            return Size(max(targetWidth, 1920), max(targetHeight, 1080))
+        }
+
+        val normalizedTargetRatio = if (targetWidth > 0 && targetHeight > 0)
+            max(targetWidth, targetHeight).toFloat() / min(targetWidth, targetHeight)
+        else
+            4f / 3f
+
+        return sizes.minByOrNull { size ->
+            val ratio = max(size.width, size.height).toFloat() / min(size.width, size.height)
+            abs(ratio - normalizedTargetRatio)
+        } ?: sizes.first()
     }
 
     // ─── Open camera ──────────────────────────────────────────────────────────

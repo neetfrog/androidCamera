@@ -112,5 +112,6 @@ data class CameraUiState(
     val audioLevel: Float = 0f,
 
     // Settings
-    val settings: CameraSettings = CameraSettings()
+    val settings: CameraSettings = CameraSettings(),
+    val previewAspectRatio: Float? = null
 )

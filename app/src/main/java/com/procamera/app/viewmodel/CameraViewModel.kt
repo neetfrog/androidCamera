@@ -23,6 +23,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     // Track whether surface arrived before camera was ready
     private var pendingSurface: SurfaceTexture? = null
+    private var pendingSurfaceSize: Pair<Int, Int>? = null
 
     private var recordingDurationJob: Job? = null
     private var timerJob: Job? = null
@@ -78,11 +79,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 // If surface arrived before camera was ready, start preview now
                 pendingSurface?.let { st ->
-                    val surf = Surface(st)
-                    camera2.createPreviewSession(surf, _uiState.value.settings)
-                    _uiState.update { it.copy(isCameraReady = true) }
-                    orientationSensor.start()
+                    val (pendingWidth, pendingHeight) = pendingSurfaceSize ?: Pair(0, 0)
+                    withContext(Dispatchers.Main) {
+                        startPreview(st, pendingWidth, pendingHeight)
+                    }
                     pendingSurface = null
+                    pendingSurfaceSize = null
                 }
             } catch (e: Exception) {
                 postError("Failed to open camera: ${e.message}")
@@ -94,8 +96,19 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun startPreview(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
         if (!camera2.isCameraOpen) {
             pendingSurface = surfaceTexture
+            pendingSurfaceSize = Pair(width, height)
             return
         }
+
+        val previewSize = camera2.choosePreviewSize(width, height)
+        surfaceTexture.setDefaultBufferSize(previewSize.width, previewSize.height)
+        val aspectRatio = if (previewSize.width >= previewSize.height)
+            previewSize.height.toFloat() / previewSize.width
+        else
+            previewSize.width.toFloat() / previewSize.height
+
+        _uiState.update { it.copy(previewAspectRatio = aspectRatio) }
+
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val surf = Surface(surfaceTexture)
