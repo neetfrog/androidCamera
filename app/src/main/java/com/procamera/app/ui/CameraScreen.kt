@@ -1,6 +1,5 @@
 package com.procamera.app.ui
 
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -30,116 +29,122 @@ import com.procamera.app.viewmodel.CameraViewModel
 fun CameraScreen(viewModel: CameraViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // ── Full-screen preview with aspect ratio constraint ────────────────
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(4f / 3f)  // Standard camera preview aspect ratio
-                .align(Alignment.TopCenter)
-        ) {
-            ViewfinderSurface(
-                modifier = Modifier.fillMaxSize(),
-                viewModel = viewModel
-            )
-        }
-
-        // ── Grid overlay ───────────────────────────────────────────────────────
-        GridOverlay(
-            gridMode = state.gridMode,
-            modifier = Modifier.fillMaxSize()
-        )
-
-        // ── Film preset overlay ────────────────────────────────────────────────
-        val filmPresetConfig = com.procamera.app.data.FilmPresetsLibrary.getPreset(state.settings.filmPreset)
-        if (filmPresetConfig != null && state.settings.filmPreset != FilmPreset.NONE) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(filmPresetConfig.colorShift.copy(alpha = 0.25f))
-            )
-        }
-
-        // ── Level indicator ────────────────────────────────────────────────────
-        if (state.showLevelIndicator) {
-            LevelIndicator(
-                pitch = state.pitch,
-                roll  = state.roll,
-                modifier = Modifier
-                    .size(180.dp)
-                    .align(Alignment.Center)
-            )
-        }
-
-        // ── Timer countdown overlay ────────────────────────────────────────────
-        if (state.timerCountdown > 0) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0x44000000)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = state.timerCountdown.toString(),
-                    color = OrangePrimary,
-                    fontSize = 120.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                )
-            }
-        }
-
-        // ── Top controls ───────────────────────────────────────────────────────
+        // ── Top controls (outside preview, above it) ────────────────────────────
         TopControls(
             state = state,
             viewModel = viewModel,
             modifier = Modifier
                 .fillMaxWidth()
-                .align(Alignment.TopCenter)
                 .windowInsetsPadding(WindowInsets.statusBars)
         )
 
-        // ── Recording indicator ────────────────────────────────────────────────
-        if (state.isRecording) {
-            RecordingIndicator(
-                durationSec = state.recordingDurationSec,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(end = 12.dp, top = 48.dp)
-            )
-        }
-
-        // ── Manual controls side panel ─────────────────────────────────────────
-        AnimatedVisibility(
-            visible = state.showManualControls,
-            enter = slideInHorizontally(
-                initialOffsetX = { it },
-                animationSpec = tween(250)
-            ) + fadeIn(tween(250)),
-            exit = slideOutHorizontally(
-                targetOffsetX = { it },
-                animationSpec = tween(200)
-            ) + fadeOut(tween(200)),
-            modifier = Modifier.align(Alignment.CenterEnd)
+        // ── Preview area (fills available space) ────────────────────────────────
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
         ) {
-            ManualControls(
-                state = state,
-                viewModel = viewModel,
+            // Preview surface
+            ViewfinderSurface(
                 modifier = Modifier
-                    .fillMaxHeight()
-                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .fillMaxWidth()
+                    .aspectRatio(3f / 4f)
+                    .align(Alignment.TopCenter),
+                viewModel = viewModel
             )
+
+            // ── Grid overlay ───────────────────────────────────────────────────
+            GridOverlay(
+                gridMode = state.gridMode,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // ── Film preset overlay ────────────────────────────────────────────
+            val filmPresetConfig = com.procamera.app.data.FilmPresetsLibrary.getPreset(state.settings.filmPreset)
+            if (filmPresetConfig != null && state.settings.filmPreset != FilmPreset.NONE) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(filmPresetConfig.colorShift.copy(alpha = 0.25f))
+                )
+            }
+
+            // ── Level indicator ────────────────────────────────────────────────
+            if (state.showLevelIndicator) {
+                LevelIndicator(
+                    pitch = state.pitch,
+                    roll  = state.roll,
+                    modifier = Modifier
+                        .size(180.dp)
+                        .align(Alignment.Center)
+                )
+            }
+
+            // ── Timer countdown overlay ────────────────────────────────────────
+            if (state.timerCountdown > 0) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0x44000000)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = state.timerCountdown.toString(),
+                        color = OrangePrimary,
+                        fontSize = 120.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
+            // ── Recording indicator ────────────────────────────────────────────
+            if (state.isRecording) {
+                RecordingIndicator(
+                    durationSec = state.recordingDurationSec,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(end = 12.dp, top = 12.dp)
+                )
+            }
+
+            // ── Camera parameters HUD ──────────────────────────────────────────
+            CameraParamsHud(
+                state = state,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 8.dp)
+            )
+
+            // ── Snackbar messages ──────────────────────────────────────────────
+            state.savedMessage?.let { msg ->
+                SnackMessage(
+                    message = msg,
+                    color = Color(0xFF4CAF50),
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 60.dp)
+                )
+            }
+            state.errorMessage?.let { msg ->
+                SnackMessage(
+                    message = msg,
+                    color = RecordRed,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 60.dp)
+                )
+            }
         }
 
-        // ── Bottom section (histogram + audio meter + controls) ────────────────
+        // ── Bottom controls section (histogram + audio + controls) ─────────────
         Column(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.navigationBars)
         ) {
@@ -179,36 +184,6 @@ fun CameraScreen(viewModel: CameraViewModel) {
             BottomControls(
                 state = state,
                 viewModel = viewModel
-            )
-        }
-
-        // ── Camera parameters HUD ──────────────────────────────────────────────
-        if (!state.showManualControls) {
-            CameraParamsHud(
-                state = state,
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(start = 8.dp)
-            )
-        }
-
-        // ── Snackbar messages ──────────────────────────────────────────────────
-        state.savedMessage?.let { msg ->
-            SnackMessage(
-                message = msg,
-                color = Color(0xFF4CAF50),
-                modifier = Modifier.align(Alignment.TopCenter)
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(top = 60.dp)
-            )
-        }
-        state.errorMessage?.let { msg ->
-            SnackMessage(
-                message = msg,
-                color = RecordRed,
-                modifier = Modifier.align(Alignment.TopCenter)
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(top = 60.dp)
             )
         }
     }

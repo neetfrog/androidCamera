@@ -85,19 +85,28 @@ class VideoRecorder(private val context: Context) {
     fun stop(): File? {
         return try {
             mediaRecorder?.apply {
-                stop()
+                try {
+                    stop()
+                } catch (e: Exception) {
+                    Log.e(TAG, "MediaRecorder.stop() failed: ${e.message}", e)
+                    throw e
+                }
                 reset()
             }
+            
             currentFile?.also { file ->
+                // Give the system a brief moment to finalize the file
+                Thread.sleep(100)
+                
                 // Verify file exists and has content
-                if (file.exists() && file.length() > 0) {
+                if (file.exists() && file.length() > 1000) {  // At least 1KB
                     Log.d(TAG, "Video file created: ${file.absolutePath} (${file.length()} bytes)")
                     // Register with MediaStore so it appears in Gallery
                     registerVideoWithMediaStore(file)
                     onVideoSaved?.invoke(file)
                     file
                 } else {
-                    Log.e(TAG, "Video file not created or empty: ${file.absolutePath}")
+                    Log.e(TAG, "Video file not created or empty: ${file.absolutePath} (size: ${file.length()})")
                     null
                 }
             }
@@ -116,13 +125,22 @@ class VideoRecorder(private val context: Context) {
                 put(MediaStore.Video.Media.TITLE, videoFile.nameWithoutExtension)
                 put(MediaStore.Video.Media.DISPLAY_NAME, videoFile.name)
                 put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                put(MediaStore.Video.Media.DATA, videoFile.absolutePath)
                 put(MediaStore.Video.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/ProCamera")
+                    put(MediaStore.Video.Media.IS_PENDING, 1)
+                } else {
+                    put(MediaStore.Video.Media.DATA, videoFile.absolutePath)
                 }
             }
-            context.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+
+            val uri = context.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+            if (uri != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val updateValues = ContentValues().apply {
+                    put(MediaStore.Video.Media.IS_PENDING, 0)
+                }
+                context.contentResolver.update(uri, updateValues, null, null)
+            }
             Log.d(TAG, "Video registered: ${videoFile.name}")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to register video: ${e.message}")

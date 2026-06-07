@@ -20,8 +20,6 @@ fun ViewfinderSurface(
             TextureView(context).apply {
                 // Configure TextureView to maintain camera aspect ratio
                 // Standard camera preview aspect ratio is typically 4:3 or 16:9
-                // Using scaleType-like behavior through layout params
-                
                 surfaceTextureListener = object : TextureView.SurfaceTextureListener {
                     override fun onSurfaceTextureAvailable(
                         surface: SurfaceTexture, width: Int, height: Int

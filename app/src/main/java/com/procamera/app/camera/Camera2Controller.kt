@@ -12,6 +12,7 @@ import android.hardware.camera2.params.TonemapCurve
 import android.media.Image
 import android.media.ImageReader
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.HandlerThread
 import android.provider.MediaStore
@@ -515,6 +516,7 @@ class Camera2Controller(private val context: Context) {
                 put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     put(MediaStore.MediaColumns.RELATIVE_PATH, "DCIM/ProCamera")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
                 }
             }
             
@@ -526,6 +528,13 @@ class Camera2Controller(private val context: Context) {
             context.contentResolver.openOutputStream(uri)?.use { stream ->
                 stream.write(bytes)
                 stream.flush()
+            } ?: throw Exception("Could not open output stream")
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val updateValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.IS_PENDING, 0)
+                }
+                context.contentResolver.update(uri, updateValues, null, null)
             }
             
             Log.d(TAG, "Photo saved: $fileName")
@@ -543,14 +552,31 @@ class Camera2Controller(private val context: Context) {
     private fun saveRaw(image: Image, result: TotalCaptureResult) {
         try {
             if (image.format != ImageFormat.RAW_SENSOR) {
-                throw Exception("Invalid image format: ${image.format}, expected RAW_SENSOR")
+                throw Exception("Image format is ${image.format}, not RAW_SENSOR")
             }
 
             val chars = cameraCharacteristics ?: throw Exception("No camera characteristics")
+            Log.d(TAG, "Saving RAW: ${image.width}x${image.height}, format=${image.format}")
             
-            Log.d(TAG, "Creating DNG from RAW sensor data: ${image.width}x${image.height}")
-            
-            // Use reflection to access DngCreator (not exposed in SDK but available at runtime)
+            // Simple approach: Use reflection to create DNG, but with proper error handling
+            return try {
+                saveDng(image, result, chars)
+            } catch (dngError: Exception) {
+                Log.w(TAG, "DNG creation failed, falling back to raw binary: ${dngError.message}")
+                // Fallback: just save raw bytes
+                saveRawBytes(image)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "saveRaw failed: ${e.message}", e)
+            onError?.invoke("Failed to save RAW: ${e.message}")
+        } finally {
+            image.close()
+        }
+    }
+
+    private fun saveDng(image: Image, result: TotalCaptureResult, chars: CameraCharacteristics) {
+        try {
+            // Try to use DNG Creator via reflection
             val dngCreatorClass = Class.forName("android.media.DngCreator")
             val constructor = dngCreatorClass.getConstructor(
                 CameraCharacteristics::class.java,
@@ -558,46 +584,102 @@ class Camera2Controller(private val context: Context) {
             )
             val dngCreator = constructor.newInstance(chars, result)
             
-            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val fileName = "RAW_$timeStamp.dng"
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val fileName = "RAW_$timestamp.dng"
             
             val contentValues = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
                 put(MediaStore.MediaColumns.MIME_TYPE, "image/x-adobe-dng")
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     put(MediaStore.MediaColumns.RELATIVE_PATH, "DCIM/ProCamera")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
                 }
             }
             
             val uri = context.contentResolver.insert(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                 contentValues
-            ) ?: throw Exception("Failed to create MediaStore entry")
+            ) ?: throw Exception("Failed to create content URI")
             
-            Log.d(TAG, "Writing DNG to: $uri")
+            Log.d(TAG, "DNG URI: $uri")
             
+            // Write image using reflection
             context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                val writeImageMethod = dngCreatorClass.getMethod(
+                val writeMethod = dngCreatorClass.getMethod(
                     "writeImage",
                     java.io.OutputStream::class.java,
                     Image::class.java
                 )
-                writeImageMethod.invoke(dngCreator, outputStream, image)
-                Log.d(TAG, "DNG written successfully: $fileName")
-            } ?: throw Exception("Failed to open output stream for DNG")
+                writeMethod.invoke(dngCreator, outputStream, image)
+                Log.d(TAG, "DNG saved: $fileName")
+                onRawSaved?.invoke(File(fileName))
+            } ?: throw Exception("Could not open output stream")
             
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val updateValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.IS_PENDING, 0)
+                }
+                context.contentResolver.update(uri, updateValues, null, null)
+            }
+            
+            // Close DNG creator
             val closeMethod = dngCreatorClass.getMethod("close")
             closeMethod.invoke(dngCreator)
             
-            // Return the URI path for callback
-            val file = File(fileName)
-            onRawSaved?.invoke(file)
-            
         } catch (e: Exception) {
-            Log.e(TAG, "saveRaw failed: ${e.message}", e)
-            onError?.invoke("Failed to save RAW: ${e.message}")
-        } finally {
-            image.close()
+            throw Exception("DNG creation failed: ${e.message}", e)
+        }
+    }
+
+    private fun saveRawBytes(image: Image) {
+        try {
+            val plane = image.planes[0]  // RAW_SENSOR has single plane
+            val buffer = plane.buffer
+            val data = ByteArray(buffer.remaining())
+            buffer.get(data)
+            
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val fileName = "RAW_$timestamp.raw"
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "application/octet-stream")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, "DCIM/ProCamera")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val uri = context.contentResolver.insert(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    contentValues
+                ) ?: throw Exception("Failed to create MediaStore entry for RAW")
+                
+                context.contentResolver.openOutputStream(uri)?.use { it.write(data) }
+                    ?: throw Exception("Could not open RAW output stream")
+
+                val updateValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.IS_PENDING, 0)
+                }
+                context.contentResolver.update(uri, updateValues, null, null)
+
+                Log.d(TAG, "Raw bytes saved via MediaStore: $uri (${data.size} bytes)")
+                onRawSaved?.invoke(File(fileName))
+            } else {
+                val dcimDir = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "ProCamera").apply {
+                    if (!exists() && !mkdirs()) {
+                        throw Exception("Could not create directory: $absolutePath")
+                    }
+                }
+                val file = File(dcimDir, fileName)
+                file.writeBytes(data)
+                if (file.exists() && file.length() > 0) {
+                    Log.d(TAG, "Raw bytes saved: ${file.absolutePath} (${data.size} bytes)")
+                    onRawSaved?.invoke(file)
+                } else {
+                    throw Exception("File not created or empty")
+                }
+            }
+        } catch (e: Exception) {
+            throw Exception("Failed to save raw bytes: ${e.message}", e)
         }
     }
 

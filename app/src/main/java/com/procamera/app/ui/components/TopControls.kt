@@ -37,7 +37,8 @@ fun TopControls(
         modifier = modifier
             .fillMaxWidth()
             .background(Color(0x88000000))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .heightIn(min = 88.dp)
+            .padding(horizontal = 12.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -137,19 +138,19 @@ fun TopIconBtn(
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 4.dp),
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
             tint = if (active) OrangePrimary else Color(0x99FFFFFF),
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(22.dp)
         )
         Text(
             text = label,
             color = if (active) OrangePrimary else Color(0x88FFFFFF),
-            fontSize = 8.sp
+            fontSize = 9.sp
         )
     }
 }
