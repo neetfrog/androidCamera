@@ -1,6 +1,6 @@
 ﻿# RawSnap
 
-RawSnap is a compact Camera2 API app that let's you take RAW images.
+Lightweight Camera2 app with RAW capture and manual controls
 
 It supports:
 - Photo capture (JPEG)
