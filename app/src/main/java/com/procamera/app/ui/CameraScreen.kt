@@ -112,14 +112,6 @@ fun CameraScreen(viewModel: CameraViewModel) {
                     )
                 }
 
-                // ── Camera parameters HUD ──────────────────────────────────────────
-                CameraParamsHud(
-                    state = state,
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(start = 8.dp)
-                )
-
                 // ── Snackbar messages ──────────────────────────────────────────────
                 state.savedMessage?.let { msg ->
                     SnackMessage(

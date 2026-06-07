@@ -49,6 +49,11 @@ class Camera2Controller(private val context: Context) {
     internal var previewSurface: Surface? = null
         private set
 
+    @Volatile
+    private var videoRecordingSurface: Surface? = null
+    @Volatile
+    private var isVideoCaptureSession: Boolean = false
+
     private var currentCameraId = ""
     private var cameraCharacteristics: CameraCharacteristics? = null
 
@@ -80,6 +85,31 @@ class Camera2Controller(private val context: Context) {
             .get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
     }
 
+    fun getAvailableCameraOptions(): List<CameraOption> = cameraManager.cameraIdList.mapNotNull { id ->
+        try {
+            val chars = cameraManager.getCameraCharacteristics(id)
+            val facing = chars.get(CameraCharacteristics.LENS_FACING)
+            val lensLabel = when (facing) {
+                CameraCharacteristics.LENS_FACING_FRONT -> "Front"
+                CameraCharacteristics.LENS_FACING_BACK -> {
+                    val focal = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                        ?.firstOrNull() ?: 0f
+                    when {
+                        focal > 0f && focal < 3.5f -> "Back (Ultra Wide)"
+                        focal > 0f && focal < 5.2f -> "Back (Wide)"
+                        focal > 0f -> "Back (Main)"
+                        else -> "Back"
+                    }
+                }
+                CameraCharacteristics.LENS_FACING_EXTERNAL -> "External"
+                else -> "Camera"
+            }
+            CameraOption(id, "$lensLabel ($id)")
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     fun getCameraCapabilities(cameraId: String): CameraCapabilities {
         val chars = cameraManager.getCameraCharacteristics(cameraId)
         val caps = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: intArrayOf()
@@ -87,8 +117,17 @@ class Camera2Controller(private val context: Context) {
         val hasRaw = caps.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW)
                 && streamMap?.getOutputSizes(ImageFormat.RAW_SENSOR) != null
         val maxZoom = chars.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM) ?: 1f
+        val minZoom = calculateMinZoomRatio(chars)
         val minFocus = chars.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
-        return CameraCapabilities(hasRaw, maxZoom, minFocus)
+        return CameraCapabilities(hasRaw, maxZoom, minZoom, minFocus)
+    }
+
+    private fun calculateMinZoomRatio(chars: CameraCharacteristics): Float {
+        val focalLengths = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+        if (focalLengths == null || focalLengths.size <= 1) return 1f
+        val minFocal = focalLengths.minOrNull() ?: return 1f
+        val maxFocal = focalLengths.maxOrNull() ?: return 1f
+        return (minFocal / maxFocal).coerceAtMost(1f)
     }
 
     fun getCurrentSensorOrientation(): Int? = cameraCharacteristics?.get(CameraCharacteristics.SENSOR_ORIENTATION)
@@ -162,6 +201,8 @@ class Camera2Controller(private val context: Context) {
             ?: run { cont.resumeWithException(IllegalStateException("No stream map")); return@suspendCancellableCoroutine }
 
         previewSurface = surface
+        isVideoCaptureSession = false
+        videoRecordingSurface = null
         val surfaces = mutableListOf(surface)
 
         // JPEG ImageReader (max resolution)
@@ -255,6 +296,8 @@ class Camera2Controller(private val context: Context) {
         val callback = object : CameraCaptureSession.StateCallback() {
             override fun onConfigured(session: CameraCaptureSession) {
                 captureSession = session
+                videoRecordingSurface = recordingSurf
+                isVideoCaptureSession = true
                 try {
                     val req = device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                         addTarget(previewSurf)
@@ -321,8 +364,18 @@ class Camera2Controller(private val context: Context) {
 
     fun updateSettings(settings: CameraSettings) {
         val session = captureSession ?: return
+        val device = cameraDevice ?: return
         try {
-            val req = buildPreviewRequest(settings)
+            val req = if (isVideoCaptureSession && previewSurface != null && videoRecordingSurface != null) {
+                device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
+                    addTarget(previewSurface!!)
+                    addTarget(videoRecordingSurface!!)
+                    analysisImageReader?.surface?.let { addTarget(it) }
+                    applySettings(this, settings, isVideo = true)
+                }.build()
+            } else {
+                buildPreviewRequest(settings)
+            }
             session.setRepeatingRequest(req, previewCaptureCallback, cameraHandler)
         } catch (e: CameraAccessException) {
             Log.e(TAG, "updateSettings failed", e)
@@ -332,10 +385,11 @@ class Camera2Controller(private val context: Context) {
     private fun buildPreviewRequest(settings: CameraSettings): CaptureRequest {
         val device = cameraDevice!!
         val surface = previewSurface!!
-        return device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
+        val template = if (settings.isFlatVideoMode) CameraDevice.TEMPLATE_RECORD else CameraDevice.TEMPLATE_PREVIEW
+        return device.createCaptureRequest(template).apply {
             addTarget(surface)
             analysisImageReader?.surface?.let { addTarget(it) }
-            applySettings(this, settings, isVideo = false)
+            applySettings(this, settings, isVideo = settings.isFlatVideoMode)
         }.build()
     }
 
@@ -411,6 +465,7 @@ class Camera2Controller(private val context: Context) {
         // ── Flat video / low processing mode ────────────────────────────────────
         if (isVideo && settings.isFlatVideoMode) {
             builder.set(CaptureRequest.EDGE_MODE, CameraMetadata.EDGE_MODE_OFF)
+            builder.set(CaptureRequest.HOT_PIXEL_MODE, CameraMetadata.HOT_PIXEL_MODE_OFF)
         }
 
         // ── Zoom ──────────────────────────────────────────────────────────────
@@ -442,12 +497,19 @@ class Camera2Controller(private val context: Context) {
         zoomRatio: Float,
         chars: CameraCharacteristics
     ) {
+        val minZoom = calculateMinZoomRatio(chars)
+        val maxZoom = chars.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM) ?: 1f
+        val zoom = zoomRatio.coerceIn(minZoom, maxZoom)
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            builder.set(CaptureRequest.CONTROL_ZOOM_RATIO, zoomRatio)
+            builder.set(CaptureRequest.CONTROL_ZOOM_RATIO, zoom)
         } else {
             val sensor = chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE) ?: return
-            val maxZoom = chars.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM) ?: 1f
-            val zoom = zoomRatio.coerceIn(1f, maxZoom)
+            if (zoom < 1f) {
+                // Zoom values below 1× are not supported via crop region on older APIs.
+                builder.set(CaptureRequest.CONTROL_ZOOM_RATIO, zoom)
+                return
+            }
             val cropW = (sensor.width() / zoom).toInt()
             val cropH = (sensor.height() / zoom).toInt()
             val left = (sensor.width() - cropW) / 2
@@ -717,6 +779,8 @@ class Camera2Controller(private val context: Context) {
             rawImageReader?.close(); rawImageReader = null
             analysisImageReader?.close(); analysisImageReader = null
             previewSurface = null
+            videoRecordingSurface = null
+            isVideoCaptureSession = false
         } catch (e: Exception) {
             Log.e(TAG, "closeCamera error", e)
         }
@@ -731,5 +795,6 @@ class Camera2Controller(private val context: Context) {
 data class CameraCapabilities(
     val hasRawSupport: Boolean,
     val maxZoomRatio: Float,
+    val minZoomRatio: Float,
     val minFocusDistance: Float
 )

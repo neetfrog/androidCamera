@@ -66,35 +66,47 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun initCamera(isFront: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                val cameraOptions = camera2.getAvailableCameraOptions()
+                if (cameraOptions.isEmpty()) throw IllegalStateException("No cameras found")
+
+                _uiState.update { it.copy(cameraOptions = cameraOptions) }
+
                 val cameraId = (if (isFront) camera2.getFrontCameraId() else camera2.getBackCameraId())
-                    ?: throw IllegalStateException("No ${if (isFront) "front" else "back"} camera found")
+                    ?: cameraOptions.first().id
 
-                camera2.closeCamera()
-                camera2.openCamera(cameraId as String)
-
-                val caps = camera2.getCameraCapabilities(cameraId)
-                _uiState.update {
-                    it.copy(
-                        currentCameraId = cameraId,
-                        isFrontCamera = isFront,
-                        hasRawSupport = caps.hasRawSupport,
-                        maxZoomRatio = caps.maxZoomRatio,
-                        minFocusDistance = caps.minFocusDistance
-                    )
-                }
-
-                val surfaceTexture = currentSurfaceTexture ?: pendingSurface
-                val surfaceSize = currentSurfaceSize ?: pendingSurfaceSize
-                if (surfaceTexture != null && surfaceSize != null) {
-                    withContext(Dispatchers.Main) {
-                        startPreview(surfaceTexture, surfaceSize.first, surfaceSize.second)
-                    }
-                    pendingSurface = null
-                    pendingSurfaceSize = null
-                }
+                openCameraInternal(cameraId)
             } catch (e: Exception) {
                 postError("Failed to open camera: ${e.message}")
             }
+        }
+    }
+
+    private suspend fun openCameraInternal(cameraId: String) {
+        camera2.closeCamera()
+        camera2.openCamera(cameraId)
+
+        val caps = camera2.getCameraCapabilities(cameraId)
+        val isFront = camera2.getCurrentLensFacing() == CameraCharacteristics.LENS_FACING_FRONT
+
+        _uiState.update {
+            it.copy(
+                currentCameraId = cameraId,
+                isFrontCamera = isFront,
+                hasRawSupport = caps.hasRawSupport,
+                maxZoomRatio = caps.maxZoomRatio,
+                minZoomRatio = caps.minZoomRatio,
+                minFocusDistance = caps.minFocusDistance
+            )
+        }
+
+        val surfaceTexture = currentSurfaceTexture ?: pendingSurface
+        val surfaceSize = currentSurfaceSize ?: pendingSurfaceSize
+        if (surfaceTexture != null && surfaceSize != null) {
+            withContext(Dispatchers.Main) {
+                startPreview(surfaceTexture, surfaceSize.first, surfaceSize.second)
+            }
+            pendingSurface = null
+            pendingSurfaceSize = null
         }
     }
 
@@ -250,11 +262,27 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     // ─── Camera switching ─────────────────────────────────────────────────────
 
     fun toggleCamera() {
-        val isFront = _uiState.value.isFrontCamera
+        val options = _uiState.value.cameraOptions
+        if (options.isEmpty()) return
+
+        val currentId = _uiState.value.currentCameraId
+        val nextIndex = options.indexOfFirst { it.id == currentId }.let {
+            if (it < 0 || it >= options.lastIndex) 0 else it + 1
+        }
+        selectCamera(options[nextIndex].id)
+    }
+
+    fun selectCamera(cameraId: String) {
+        if (_uiState.value.isRecording) return
         orientationSensor.stop()
-        camera2.closeCamera()
         _uiState.update { it.copy(isCameraReady = false) }
-        initCamera(!isFront)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                openCameraInternal(cameraId)
+            } catch (e: Exception) {
+                postError("Failed to switch camera: ${e.message}")
+            }
+        }
     }
 
     // ─── Settings mutations ───────────────────────────────────────────────────
@@ -266,8 +294,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setZoom(ratio: Float) {
-        val max = _uiState.value.maxZoomRatio
-        updateSetting { it.copy(zoomRatio = ratio.coerceIn(1f, max)) }
+        val state = _uiState.value
+        val zoom = ratio.coerceIn(state.minZoomRatio, state.maxZoomRatio)
+        updateSetting { it.copy(zoomRatio = zoom) }
     }
 
     fun setCaptureMode(mode: CaptureMode) {

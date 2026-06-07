@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.procamera.app.data.*
@@ -33,81 +34,98 @@ fun TopControls(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    Row(
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .background(Color(0x88000000))
-            .heightIn(min = 88.dp)
-            .padding(horizontal = 12.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
+            .heightIn(min = 106.dp)
+            .padding(horizontal = 12.dp, vertical = 12.dp)
     ) {
-        // Gallery/Folder
-        TopIconBtn(
-            icon = Icons.Default.PhotoLibrary,
-            label = "FOLDER",
-            active = false,
-            onClick = { viewModel.openSavedFilesFolder(context) }
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Camera selector
+            if (state.cameraOptions.isNotEmpty()) {
+                CameraSelector(
+                    options = state.cameraOptions,
+                    currentCameraId = state.currentCameraId,
+                    onSelect = viewModel::selectCamera
+                )
+            }
 
-        // Flash
-        TopIconBtn(
-            icon = when (state.settings.flashMode) {
-                FlashMode.OFF   -> Icons.Default.FlashOff
-                FlashMode.ON    -> Icons.Default.FlashOn
-                FlashMode.AUTO  -> Icons.Default.FlashAuto
-                FlashMode.TORCH -> Icons.Default.Highlight
-            },
-            label = state.settings.flashMode.name,
-            active = state.settings.flashMode != FlashMode.OFF,
-            onClick = { viewModel.cycleFlash() }
-        )
+            // Gallery/Folder
+            TopIconBtn(
+                icon = Icons.Default.PhotoLibrary,
+                label = "FOLDER",
+                active = false,
+                onClick = { viewModel.openSavedFilesFolder(context) }
+            )
 
-        // Timer
-        TopIconBtn(
-            icon = when (state.timerSeconds) {
-                3  -> Icons.Default.Timer3Select
-                10 -> Icons.Default.Timer10Select
-                else -> Icons.Default.TimerOff
-            },
-            label = when (state.timerSeconds) {
-                0 -> "OFF"; 3 -> "3s"; else -> "10s"
-            },
-            active = state.timerSeconds > 0,
-            onClick = { viewModel.cycleTimer() }
-        )
+            // Flash
+            TopIconBtn(
+                icon = when (state.settings.flashMode) {
+                    FlashMode.OFF   -> Icons.Default.FlashOff
+                    FlashMode.ON    -> Icons.Default.FlashOn
+                    FlashMode.AUTO  -> Icons.Default.FlashAuto
+                    FlashMode.TORCH -> Icons.Default.Highlight
+                },
+                label = state.settings.flashMode.name,
+                active = state.settings.flashMode != FlashMode.OFF,
+                onClick = { viewModel.cycleFlash() }
+            )
 
-        // Grid
-        TopIconBtn(
-            icon = when (state.gridMode) {
-                GridMode.NONE -> Icons.Default.GridOff
-                else          -> Icons.Default.GridOn
-            },
-            label = when (state.gridMode) {
-                GridMode.NONE   -> "OFF"
-                GridMode.THIRDS -> "3rds"
-                GridMode.SQUARE -> "1:1"
-                GridMode.GOLDEN -> "φ"
-            },
-            active = state.gridMode != GridMode.NONE,
-            onClick = { viewModel.cycleGrid() }
-        )
+            // Timer
+            TopIconBtn(
+                icon = when (state.timerSeconds) {
+                    3  -> Icons.Default.Timer3Select
+                    10 -> Icons.Default.Timer10Select
+                    else -> Icons.Default.TimerOff
+                },
+                label = when (state.timerSeconds) {
+                    0 -> "OFF"; 3 -> "3s"; else -> "10s"
+                },
+                active = state.timerSeconds > 0,
+                onClick = { viewModel.cycleTimer() }
+            )
 
-        // Histogram
-        TopIconBtn(
-            icon = Icons.Default.BarChart,
-            label = "HIST",
-            active = state.showHistogram,
-            onClick = { viewModel.toggleHistogram() }
-        )
+            // Grid
+            TopIconBtn(
+                icon = when (state.gridMode) {
+                    GridMode.NONE -> Icons.Default.GridOff
+                    else          -> Icons.Default.GridOn
+                },
+                label = when (state.gridMode) {
+                    GridMode.NONE   -> "OFF"
+                    GridMode.THIRDS -> "3rds"
+                    GridMode.SQUARE -> "1:1"
+                    GridMode.GOLDEN -> "φ"
+                },
+                active = state.gridMode != GridMode.NONE,
+                onClick = { viewModel.cycleGrid() }
+            )
 
-        // Level meter
-        TopIconBtn(
-            icon = Icons.Default.Straighten,
-            label = "LEVEL",
-            active = state.showLevelIndicator,
-            onClick = { viewModel.toggleLevelIndicator() }
-        )
+            // Histogram
+            TopIconBtn(
+                icon = Icons.Default.BarChart,
+                label = "HIST",
+                active = state.showHistogram,
+                onClick = { viewModel.toggleHistogram() }
+            )
+
+            // Level meter
+            TopIconBtn(
+                icon = Icons.Default.Straighten,
+                label = "LEVEL",
+                active = state.showLevelIndicator,
+                onClick = { viewModel.toggleLevelIndicator() }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        ExposureInfoRow(state = state)
     }
 }
 
@@ -137,4 +155,101 @@ fun TopIconBtn(
             fontSize = 9.sp
         )
     }
+}
+
+@Composable
+fun CameraSelector(
+    options: List<CameraOption>,
+    currentCameraId: String,
+    onSelect: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val currentLabel = options.firstOrNull { it.id == currentCameraId }?.label ?: "Camera"
+
+    Box {
+        Column(
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .clickable { expanded = true }
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = Icons.Default.CameraAlt,
+                contentDescription = currentLabel,
+                tint = Color(0x99FFFFFF),
+                modifier = Modifier.size(22.dp)
+            )
+            Text(
+                text = currentLabel,
+                color = Color(0x88FFFFFF),
+                fontSize = 9.sp
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.label) },
+                    onClick = {
+                        expanded = false
+                        onSelect(option.id)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExposureInfoRow(state: CameraUiState) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ExposureChip(
+            icon = Icons.Default.Bolt,
+            text = if (state.settings.isAutoExposure) "AUTO" else state.settings.iso.toString()
+        )
+        ExposureChip(
+            icon = Icons.Default.Timer,
+            text = if (state.settings.isAutoExposure) "AUTO" else formatShutterHud(state.settings.shutterSpeed)
+        )
+        ExposureChip(
+            icon = Icons.Default.WbAuto,
+            text = if (state.settings.isAutoWhiteBalance) "AWB" else "${state.settings.whiteBalanceKelvin}K"
+        )
+    }
+}
+
+@Composable
+private fun ExposureChip(icon: ImageVector, text: String) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0x22FFFFFF))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+        Text(
+            text = text,
+            color = Color.White,
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+private fun formatShutterHud(ss: Float): String = when {
+    ss >= 1f -> "1/${ss.toInt()}"
+    else     -> "${(1f / ss).toInt()}s"
 }

@@ -18,6 +18,11 @@ enum class VideoResolution(val width: Int, val height: Int, val label: String) {
     UHD_4K(3840, 2160, "4K")
 }
 
+data class CameraOption(
+    val id: String,
+    val label: String
+)
+
 // ─── Settings (immutable data class) ─────────────────────────────────────────
 
 data class CameraSettings(
@@ -85,6 +90,7 @@ data class CameraUiState(
     val currentCameraId: String = "",
     val hasRawSupport: Boolean = false,
     val maxZoomRatio: Float = 8f,
+    val minZoomRatio: Float = 1f,
     val minFocusDistance: Float = 0f,
 
     // UI panels
@@ -112,5 +118,6 @@ data class CameraUiState(
 
     // Settings
     val settings: CameraSettings = CameraSettings(),
+    val cameraOptions: List<CameraOption> = emptyList(),
     val previewAspectRatio: Float? = null
 )

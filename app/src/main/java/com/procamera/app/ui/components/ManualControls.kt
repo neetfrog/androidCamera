@@ -159,12 +159,19 @@ fun ManualControls(
                 val sel = s.frameRate == fps
                 Box(
                     modifier = Modifier
+                        .defaultMinSize(minWidth = 32.dp)
                         .clip(RoundedCornerShape(4.dp))
                         .background(if (sel) OrangePrimary else Color(0x33FFFFFF))
                         .clickable { viewModel.updateSetting { it.copy(frameRate = fps) } }
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
-                    Text("${fps}p", color = if (sel) Color.Black else Color.White, fontSize = 10.sp)
+                    Text(
+                        text = "${fps}p",
+                        color = if (sel) Color.Black else Color.White,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        softWrap = false
+                    )
                 }
             }
         }
@@ -203,19 +210,6 @@ fun ManualControls(
             Switch(
                 checked = s.isStabilization,
                 onCheckedChange = { viewModel.updateSetting { st -> st.copy(isStabilization = it) } },
-                colors = SwitchDefaults.colors(checkedThumbColor = OrangePrimary, checkedTrackColor = OrangePrimary.copy(alpha = 0.4f))
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("FLAT VIDEO", color = Color(0xAAFFFFFF), fontSize = 10.sp)
-            Switch(
-                checked = s.isFlatVideoMode,
-                onCheckedChange = { viewModel.updateSetting { st -> st.copy(isFlatVideoMode = it) } },
                 colors = SwitchDefaults.colors(checkedThumbColor = OrangePrimary, checkedTrackColor = OrangePrimary.copy(alpha = 0.4f))
             )
         }

@@ -57,6 +57,7 @@ fun BottomControls(
         // ── Zoom slider ────────────────────────────────────────────────────────
         ZoomControl(
             zoom = state.settings.zoomRatio,
+            minZoom = state.minZoomRatio,
             maxZoom = state.maxZoomRatio,
             onZoomChange = viewModel::setZoom,
             modifier = Modifier.padding(horizontal = 40.dp)
@@ -234,6 +235,7 @@ fun CaptureButton(
 @Composable
 fun ZoomControl(
     zoom: Float,
+    minZoom: Float,
     maxZoom: Float,
     onZoomChange: (Float) -> Unit,
     modifier: Modifier = Modifier
@@ -247,8 +249,13 @@ fun ZoomControl(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.padding(bottom = 4.dp)
         ) {
-            listOf(1f, 2f, 4f, 8f).forEach { preset ->
-                if (preset <= maxZoom) {
+            listOf(minZoom, 1f, 2f, 4f, 8f).forEach { preset ->
+                if (preset in minZoom..maxZoom) {
+                    val label = when {
+                        preset == minZoom && preset != 1f -> "${"%.1f".format(preset)}×"
+                        preset < 2f -> "1×"
+                        else -> "${preset.toInt()}×"
+                    }
                     val sel = kotlin.math.abs(zoom - preset) < 0.15f
                     Box(
                         modifier = Modifier
@@ -260,7 +267,7 @@ fun ZoomControl(
                             .padding(horizontal = 10.dp, vertical = 3.dp)
                     ) {
                         Text(
-                            text = if (preset < 2f) "1×" else "${preset.toInt()}×",
+                            text = label,
                             color = if (sel) Color.Black else Color.White,
                             fontSize = 11.sp
                         )
@@ -272,7 +279,7 @@ fun ZoomControl(
         Slider(
             value = zoom,
             onValueChange = onZoomChange,
-            valueRange = 1f..maxZoom.coerceAtLeast(1.1f),
+            valueRange = minZoom..maxZoom.coerceAtLeast(minZoom + 0.1f),
             modifier = Modifier.fillMaxWidth(),
             colors = SliderDefaults.colors(
                 thumbColor = OrangePrimary,
